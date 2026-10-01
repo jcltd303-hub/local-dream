@@ -142,7 +142,14 @@ data class Model(
 
     val supportsExternalIdentityAdapter: Boolean
         get() = configDefaults.identityVisionEncoder != null &&
-            configDefaults.identityAdapter != null && !runOnCpu
+            configDefaults.identityAdapter != null && !runOnCpu && !isDit
+
+    fun hasUsableExternalIdentityAdapter(context: Context): Boolean {
+        if (!supportsExternalIdentityAdapter) return false
+        val dir = File(getModelsDir(context), id)
+        return File(dir, configDefaults.identityVisionEncoder!!).isFile &&
+            File(dir, configDefaults.identityAdapter!!).isFile
+    }
 
     val supportsIdentityReference: Boolean
         get() = supportsNativeReferenceEditing || supportsExternalIdentityAdapter
