@@ -156,6 +156,23 @@ object DreamLiteAbi {
             )
         }
 
+        val encoderOutputs = parsed.getValue("vae_encoder").outputs.map { it.stateKey }.toSet()
+        if (DreamLiteOrchestrator.REFERENCE_LATENT_STATE_KEY !in encoderOutputs) {
+            return ParseResult.Invalid("DreamLite ABI VAE encoder must produce reference_latent state")
+        }
+
+        val conditioning = parsed.getValue("text_encoder")
+        val conditioningInputs = conditioning.inputs.map { it.stateKey }.toSet()
+        val conditioningOutputs = conditioning.outputs.map { it.stateKey }.toSet()
+        if (DreamLiteOrchestrator.TOKENS_STATE_KEY !in conditioningInputs ||
+            DreamLiteOrchestrator.CONDITIONING_STATE_KEY !in conditioningOutputs ||
+            DreamLiteOrchestrator.ATTENTION_MASK_STATE_KEY !in conditioningOutputs
+        ) {
+            return ParseResult.Invalid(
+                "DreamLite ABI conditioning component must consume tokens and produce conditioning plus attention_mask",
+            )
+        }
+
         val decoderInputs = parsed.getValue("vae_decoder").inputs.map { it.stateKey }.toSet()
         if (DreamLiteOrchestrator.LATENT_STATE_KEY !in decoderInputs) {
             return ParseResult.Invalid("DreamLite ABI VAE decoder must consume latent state")
