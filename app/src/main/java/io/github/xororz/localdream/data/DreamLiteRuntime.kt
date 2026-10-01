@@ -40,9 +40,10 @@ interface DreamLiteRuntime : Closeable {
 }
 
 /**
- * Placeholder factory deliberately fails closed until the LiteRT CompiledModel
- * dependency and converted DreamLite ABI are both pinned. No request may fall
- * back into the QNN Stable Diffusion executable.
+ * LiteRT-backed runtime for the converted DreamLite component graphs.
+ *
+ * Creation is NPU-only and fail-closed. Generation remains gated until
+ * CompiledModel tensor metadata has been inspected against DreamLite ABI v1.
  */
 private class LiteRtDreamLiteRuntime(
     private val models: List<Pair<File, CompiledModel>>,
