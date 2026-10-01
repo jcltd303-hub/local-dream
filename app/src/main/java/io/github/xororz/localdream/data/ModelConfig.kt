@@ -40,6 +40,7 @@ data class ModelConfig(
     val dreamliteVaeEncoder: String? = null,
     val dreamliteVaeDecoder: String? = null,
     val dreamliteTextEncoder: String? = null,
+    val dreamliteMultimodalConditioning: Boolean? = null,
 ) {
     /** Field-by-field merge: values from this win, [other] fills the nulls. */
     fun withFallback(other: ModelConfig): ModelConfig = ModelConfig(
@@ -58,6 +59,7 @@ data class ModelConfig(
         dreamliteVaeEncoder = dreamliteVaeEncoder ?: other.dreamliteVaeEncoder,
         dreamliteVaeDecoder = dreamliteVaeDecoder ?: other.dreamliteVaeDecoder,
         dreamliteTextEncoder = dreamliteTextEncoder ?: other.dreamliteTextEncoder,
+        dreamliteMultimodalConditioning = dreamliteMultimodalConditioning ?: other.dreamliteMultimodalConditioning,
     )
 
     /** Fill any remaining nulls from the global defaults. */
@@ -111,6 +113,10 @@ data class ModelConfig(
                     dreamliteVaeEncoder = json.optStringOrNull("dreamlite_vae_encoder"),
                     dreamliteVaeDecoder = json.optStringOrNull("dreamlite_vae_decoder"),
                     dreamliteTextEncoder = json.optStringOrNull("dreamlite_text_encoder"),
+                    dreamliteMultimodalConditioning =
+                        if (json.has("dreamlite_multimodal_conditioning"))
+                            json.optBoolean("dreamlite_multimodal_conditioning")
+                        else null,
                     scheduler = json.optStringOrNull("default_scheduler")?.let { value ->
                         value.takeIf { it in VALID_SCHEDULERS }.also {
                             if (it == null) Log.w(TAG, "ignore unknown scheduler '$value' in ${file.path}")
