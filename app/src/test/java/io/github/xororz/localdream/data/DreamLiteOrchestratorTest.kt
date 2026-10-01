@@ -33,6 +33,27 @@ class DreamLiteOrchestratorTest {
     }
 
     @Test
+    fun stateCarriesOutputsAcrossStagesWithoutModelSpecificNames() {
+        val state = DreamLiteOrchestrator.PipelineState()
+        DreamLiteOrchestrator.executeStateful(
+            DreamLiteOrchestrator.plan(false),
+            state,
+            DreamLiteOrchestrator.StatefulStageExecutor { stage, step, pipeline ->
+                when {
+                    stage == DreamLiteOrchestrator.Stage.TEXT_ENCODER ->
+                        pipeline.putAll(mapOf("conditioning" to floatArrayOf(1f)))
+                    stage == DreamLiteOrchestrator.Stage.UNET ->
+                        pipeline.putAll(mapOf("latent" to floatArrayOf((step ?: -1).toFloat())))
+                    stage == DreamLiteOrchestrator.Stage.VAE_DECODER -> {
+                        assertEquals(1f, pipeline.require(listOf("conditioning")).getValue("conditioning")[0])
+                        assertEquals(3f, pipeline.require(listOf("latent")).getValue("latent")[0])
+                    }
+                }
+            },
+        )
+    }
+
+    @Test
     fun editEncodesReferenceBeforeDenoising() {
         val plan = DreamLiteOrchestrator.plan(true)
         assertTrue(plan.hasReferenceImage)
