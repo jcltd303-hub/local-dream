@@ -2268,6 +2268,8 @@ fun ModelRunScreen(
                                             context,
                                             BackgroundGenerationService::class.java,
                                         ).apply {
+                                            putExtra("model_id", modelId)
+                                            putExtra("backend_type", model?.backendType)
                                             putExtra("prompt", promptField.text)
                                             putExtra(
                                                 "negative_prompt",
