@@ -63,7 +63,7 @@ object DreamLiteRuntimeFactory {
         // Touch the package here so callers cannot accidentally treat a runtime
         // as independent of the exact files validated by DreamLiteLiteRt.probe.
         val files = modelPackage.files
-        if (files.size != 4 || files.any { !it.isFile || it.length() <= 0L }) {
+        if (files.size != 5 || files.any { !it.isFile || it.length() <= 0L }) {
             return Result.Unavailable("DreamLite LiteRT package is no longer valid")
         }
         return Result.Unavailable(
