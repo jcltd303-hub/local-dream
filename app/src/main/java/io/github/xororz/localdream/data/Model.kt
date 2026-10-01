@@ -140,13 +140,7 @@ data class Model(
     fun hasUsableDreamLiteLiteRtPackage(context: Context): Boolean {
         if (!isDreamLiteLiteRt) return false
         val dir = File(getModelsDir(context), id)
-        val required = listOf(
-            configDefaults.dreamliteUnet,
-            configDefaults.dreamliteVaeEncoder,
-            configDefaults.dreamliteVaeDecoder,
-            configDefaults.dreamliteTextEncoder,
-        )
-        return required.all { name -> !name.isNullOrBlank() && File(dir, name).isFile }
+        return DreamLiteLiteRt.probe(dir, configDefaults) is DreamLiteLiteRt.ProbeResult.Ready
     }
 
 
