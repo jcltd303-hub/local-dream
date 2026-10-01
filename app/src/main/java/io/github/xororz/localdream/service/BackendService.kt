@@ -10,6 +10,7 @@ import io.github.xororz.localdream.R
 import io.github.xororz.localdream.data.DitEngine
 import io.github.xororz.localdream.data.DitResolution
 import io.github.xororz.localdream.data.Model
+import io.github.xororz.localdream.data.ModelConfig
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.Executors
@@ -565,12 +566,24 @@ class BackendService : Service() {
             // A packaged vision encoder can be brought up independently through
             // /identity/embed. Do not enable it for CPU/MNN-only backends: the
             // binary is a QNN context and needs the HTP runtime.
-            val identityVision = File(modelsDir, "vision_encoder.bin")
-            if (identityVision.isFile && backendType != "sd15cpu" &&
-                backendType != "sdxlmnn" && backendType != BACKEND_TYPE_UPSCALER
-            ) {
-                command += listOf("--identity_vision", identityVision.absolutePath)
-                Log.i(TAG, "Identity vision encoder enabled: ${identityVision.name}")
+            val packageConfig = ModelConfig.read(modelsDir)
+            val identityVision = packageConfig?.identityVisionEncoder?.let { File(modelsDir, it) }
+            val identityAdapter = packageConfig?.identityAdapter?.let { File(modelsDir, it) }
+            if (identityVision != null || identityAdapter != null) {
+                if (identityVision?.isFile != true || identityAdapter?.isFile != true) {
+                    Log.w(TAG, "Identity adapter package incomplete; vision/adapter must both exist")
+                } else if (backendType == "sd15cpu" || backendType == "sdxlmnn" ||
+                    backendType == BACKEND_TYPE_UPSCALER
+                ) {
+                    Log.w(TAG, "Ignoring QNN identity adapter on non-QNN backend: $backendType")
+                } else {
+                    command += listOf("--identity_vision", identityVision.absolutePath)
+                    Log.i(
+                        TAG,
+                        "Identity package ready: vision=${identityVision.name}, " +
+                            "adapter=${identityAdapter.name}, scale=${packageConfig.identityAdapterScale ?: 0.8f}",
+                    )
+                }
             }
             // The upscaler-mode process takes no safety-checker flag (same as
             // the standalone upscale screen's own invocation).
