@@ -150,6 +150,7 @@ typedef struct {
   // Last failure on this context, or the last create() failure when ctx is
   // NULL. Valid until the next call on the same context.
   const char *(*last_error)(const dit_ctx *ctx);
+  const char *(*condition_last_error)(const dit_condition_ctx *ctx);
 
   void (*set_log_callback)(dit_log_cb cb, void *user_data);
 
