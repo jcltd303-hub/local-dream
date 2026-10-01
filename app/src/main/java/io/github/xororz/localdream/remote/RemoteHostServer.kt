@@ -34,6 +34,10 @@ class RemoteHostServer(
         fun select(body: JSONObject): Response
         fun status(): JSONObject
         fun stop(body: JSONObject): JSONObject
+        fun assetsStart(body: JSONObject): Response
+        fun assetsStatus(): JSONObject
+        fun assetsResume(): Response
+        fun assetsStop(): JSONObject
     }
 
     data class Response(val code: Int, val body: JSONObject)
@@ -175,6 +179,18 @@ class RemoteHostServer(
             request.method == "POST" && request.path == RemoteProtocol.PATH_STOP ->
                 Response(200, handler.stop(request.body))
 
+            request.method == "POST" && request.path == RemoteProtocol.PATH_ASSETS_START ->
+                handler.assetsStart(request.body)
+
+            request.method == "GET" && request.path == RemoteProtocol.PATH_ASSETS_STATUS ->
+                Response(200, handler.assetsStatus())
+
+            request.method == "POST" && request.path == RemoteProtocol.PATH_ASSETS_RESUME ->
+                handler.assetsResume()
+
+            request.method == "POST" && request.path == RemoteProtocol.PATH_ASSETS_STOP ->
+                Response(200, handler.assetsStop())
+
             else -> Response(404, errorBody("not found"))
         }
     }
@@ -210,8 +226,10 @@ class RemoteHostServer(
         // order (a reordered late stop could kill a newer selection), and
         // every route is a fast, small JSON exchange.
         private const val WORKER_COUNT = 1
-        private const val SOCKET_TIMEOUT_MS = 10_000
-        private const val MAX_BODY_BYTES = 64 * 1024
+        private const val SOCKET_TIMEOUT_MS = 30_000
+        // Allows production plans to carry a handful of base64 reference images
+        // without accepting unbounded LAN requests.
+        private const val MAX_BODY_BYTES = 16 * 1024 * 1024
         private const val MAX_LINE_LENGTH = 8 * 1024
     }
 }
