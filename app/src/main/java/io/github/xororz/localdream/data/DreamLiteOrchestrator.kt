@@ -17,6 +17,31 @@ object DreamLiteOrchestrator {
         val stages: List<Stage>,
     )
 
+    /**
+     * Runs a frozen execution plan through a caller-owned stage executor.
+     *
+     * The executor owns tensor routing because only dreamlite_abi.json may
+     * define converted graph tensor names/shapes. This keeps scheduling
+     * testable without inventing an Android-side model ABI.
+     */
+    fun interface StageExecutor {
+        fun run(stage: Stage, denoiseStep: Int?)
+    }
+
+    fun execute(plan: Plan, executor: StageExecutor) {
+        var denoiseStep = 0
+        plan.stages.forEach { stage ->
+            if (stage == Stage.UNET) {
+                executor.run(stage, denoiseStep++)
+            } else {
+                executor.run(stage, null)
+            }
+        }
+        check(denoiseStep == DENOISE_STEPS) {
+            "DreamLite execution must run exactly $DENOISE_STEPS denoise steps"
+        }
+    }
+
     fun plan(hasReferenceImage: Boolean): Plan {
         val stages = buildList {
             add(Stage.TEXT_ENCODER)
