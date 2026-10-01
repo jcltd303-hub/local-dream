@@ -23,6 +23,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -187,6 +188,12 @@ class AutonomousAssetService : Service() {
                         persistState(stateFile, plan, completed, failed, job.id)
                     }
                     else -> Unit
+                }
+                // GenerationService emits its terminal state before stopSelf() has
+                // completed. Do not start the next request until that service is
+                // fully gone or its previous stopSelf() can tear down the new job.
+                withTimeoutOrNull(10_000L) {
+                    BackgroundGenerationService.isServiceRunning.first { running -> !running }
                 }
                 if (succeeded) break
                 if (attempt < plan.maxRetries) delay((attempt + 1L) * 2_000L)
