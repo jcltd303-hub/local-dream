@@ -38,6 +38,12 @@ object DreamLiteGeneration {
         )
         val hasReference = request.referenceRgb != null
         if (hasReference) {
+            require(request.referenceWidth == 1024 && request.referenceHeight == 1024) {
+                "DreamLite Mobile v1 edit reference must be normalized to 1024x1024"
+            }
+            require(request.referenceRgb!!.size == 1024 * 1024 * 3) {
+                "DreamLite edit reference must be packed RGB8"
+            }
             state.tensors[DreamLiteOrchestrator.REFERENCE_IMAGE_STATE_KEY] =
                 request.referenceRgb!!.map { (it.toInt() and 0xff) / 127.5f - 1f }.toFloatArray()
         }
