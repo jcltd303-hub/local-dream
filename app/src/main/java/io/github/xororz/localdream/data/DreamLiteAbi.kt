@@ -14,11 +14,13 @@ object DreamLiteAbi {
     const val MANIFEST = "dreamlite_abi.json"
     const val EXPECTED_STEPS = 4
 
+    const val CONDITIONING_LITERT_TEXT = "litert_text"
+    const val CONDITIONING_QWEN3_VL_GGUF = "qwen3_vl_gguf"
+
     val requiredComponents = setOf(
         "unet",
         "vae_encoder",
         "vae_decoder",
-        "text_encoder",
     )
 
     data class Tensor(
@@ -42,6 +44,7 @@ object DreamLiteAbi {
         val components: Map<String, Component>,
         val scheduler: DreamLiteScheduler.Config? = null,
         val vae: Vae? = null,
+        val conditioningBackend: String = CONDITIONING_LITERT_TEXT,
     )
 
     sealed interface ParseResult {
@@ -95,6 +98,14 @@ object DreamLiteAbi {
         }
         val vae = Vae(scalingFactor.toFloat(), shiftFactor.toFloat())
 
+        val conditioningBackend = root.optString(
+            "conditioning_backend",
+            CONDITIONING_LITERT_TEXT,
+        )
+        if (conditioningBackend !in setOf(CONDITIONING_LITERT_TEXT, CONDITIONING_QWEN3_VL_GGUF)) {
+            return ParseResult.Invalid("unsupported DreamLite conditioning backend")
+        }
+
         val componentsJson = root.optJSONObject("components")
             ?: return ParseResult.Invalid("DreamLite ABI components are missing")
         if (requiredComponents.any { !componentsJson.has(it) }) {
@@ -125,7 +136,14 @@ object DreamLiteAbi {
         }
 
         val parsed = linkedMapOf<String, Component>()
-        for (name in requiredComponents) {
+        val componentsToParse = buildSet {
+            addAll(requiredComponents)
+            if (conditioningBackend == CONDITIONING_LITERT_TEXT) add("text_encoder")
+        }
+        if (componentsToParse.any { !componentsJson.has(it) }) {
+            return ParseResult.Invalid("DreamLite ABI is missing required components")
+        }
+        for (name in componentsToParse) {
             val component = componentsJson.optJSONObject(name)
                 ?: return ParseResult.Invalid("DreamLite ABI component $name is invalid")
             val inputs = tensors(component, "inputs")
@@ -161,16 +179,17 @@ object DreamLiteAbi {
             return ParseResult.Invalid("DreamLite ABI VAE encoder must produce reference_latent state")
         }
 
-        val conditioning = parsed.getValue("text_encoder")
-        val conditioningInputs = conditioning.inputs.map { it.stateKey }.toSet()
-        val conditioningOutputs = conditioning.outputs.map { it.stateKey }.toSet()
-        if (DreamLiteOrchestrator.TOKENS_STATE_KEY !in conditioningInputs ||
-            DreamLiteOrchestrator.CONDITIONING_STATE_KEY !in conditioningOutputs ||
-            DreamLiteOrchestrator.ATTENTION_MASK_STATE_KEY !in conditioningOutputs
-        ) {
-            return ParseResult.Invalid(
-                "DreamLite ABI conditioning component must consume tokens and produce conditioning plus attention_mask",
-            )
+        parsed["text_encoder"]?.let { conditioning ->
+            val conditioningInputs = conditioning.inputs.map { it.stateKey }.toSet()
+            val conditioningOutputs = conditioning.outputs.map { it.stateKey }.toSet()
+            if (DreamLiteOrchestrator.TOKENS_STATE_KEY !in conditioningInputs ||
+                DreamLiteOrchestrator.CONDITIONING_STATE_KEY !in conditioningOutputs ||
+                DreamLiteOrchestrator.ATTENTION_MASK_STATE_KEY !in conditioningOutputs
+            ) {
+                return ParseResult.Invalid(
+                    "DreamLite ABI conditioning component must consume tokens and produce conditioning plus attention_mask",
+                )
+            }
         }
 
         val decoderInputs = parsed.getValue("vae_decoder").inputs.map { it.stateKey }.toSet()
@@ -178,6 +197,6 @@ object DreamLiteAbi {
             return ParseResult.Invalid("DreamLite ABI VAE decoder must consume latent state")
         }
 
-        return ParseResult.Valid(Manifest(parsed, scheduler, vae))
+        return ParseResult.Valid(Manifest(parsed, scheduler, vae, conditioningBackend))
     }
 }
