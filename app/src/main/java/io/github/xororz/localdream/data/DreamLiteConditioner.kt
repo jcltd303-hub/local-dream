@@ -22,4 +22,10 @@ interface DreamLiteConditioner : AutoCloseable {
     }
 
     fun encode(request: DreamLiteConditioning.Request): Output
+
+    fun applyTo(state: DreamLiteOrchestrator.PipelineState, request: DreamLiteConditioning.Request) {
+        val output = encode(request)
+        state.tensors[DreamLiteOrchestrator.CONDITIONING_STATE_KEY] = output.hiddenStates
+        state.tensors[DreamLiteOrchestrator.ATTENTION_MASK_STATE_KEY] = output.attentionMask
+    }
 }
