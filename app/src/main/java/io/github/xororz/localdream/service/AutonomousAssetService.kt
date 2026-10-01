@@ -67,6 +67,58 @@ class AutonomousAssetService : Service() {
                 Intent(context, AutonomousAssetService::class.java).setAction(ACTION_STOP),
             )
         }
+
+        fun status(context: Context): JSONObject {
+            val stateFile = latestStateFileForContext(context)
+                ?: return JSONObject()
+                    .put("state", "idle")
+                    .put("done", false)
+
+            return runCatching {
+                val raw = JSONObject(stateFile.readText())
+                val plan = raw.optJSONObject("plan") ?: JSONObject()
+                val completed = raw.optJSONArray("completed") ?: JSONArray()
+                val failed = raw.optJSONObject("failed") ?: JSONObject()
+                val runId = plan.optString("run_id")
+                val jobs = plan.optJSONArray("jobs") ?: JSONArray()
+                val root = context.getExternalFilesDir(Environment.DIRECTORY_PICTURES)
+                    ?: context.filesDir
+                val outputDir = File(
+                    root,
+                    "LocalDreamAutonomous/${sanitize(runId)}",
+                )
+                JSONObject().apply {
+                    put("state", if (raw.optBoolean("done", false)) "complete" else "running")
+                    put("run_id", runId)
+                    put("model_id", plan.optString("model_id"))
+                    put("active", raw.opt("active") ?: JSONObject.NULL)
+                    put("done", raw.optBoolean("done", false))
+                    put("total", jobs.length())
+                    put("completed", completed.length())
+                    put("failed", failed.length())
+                    put("updated_at_ms", raw.optLong("updated_at_ms", 0L))
+                    put("output_dir", outputDir.absolutePath)
+                }
+            }.getOrElse { error ->
+                JSONObject()
+                    .put("state", "error")
+                    .put("done", false)
+                    .put("error", error.message ?: "failed to read autonomous asset state")
+            }
+        }
+
+        private fun latestStateFileForContext(context: Context): File? {
+            val root = File(context.filesDir, "autonomous-assets")
+            return root.listFiles()
+                ?.map { File(it, "state.json") }
+                ?.filter { it.isFile }
+                ?.maxByOrNull { it.lastModified() }
+        }
+
+        private fun sanitize(value: String): String =
+            value.replace(Regex("[^A-Za-z0-9._-]+"), "_")
+                .take(120)
+                .ifBlank { "asset" }
     }
 
     override fun onCreate() {
