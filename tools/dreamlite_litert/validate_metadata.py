@@ -28,7 +28,11 @@ def validate(meta, conditioning_backend=TEXT_BACKEND):
     if sample[1]!=4: raise ValueError("DreamLite Mobile latent channel count must be 4")
     if sample[-1]%2: raise ValueError("DreamLite model_input width must contain two equal spatial halves")
     hidden=ins["conditioning"]["shape"]
-    if len(hidden)!=3 or hidden[-1]!=2048: raise ValueError("DreamLite Mobile conditioning width must be 2048")
+    attention=ins["attention_mask"]["shape"]
+    if hidden != [1,512,2048]:
+        raise ValueError("DreamLite Mobile conditioning must be fixed [1,512,2048]")
+    if attention != [1,512]:
+        raise ValueError("DreamLite Mobile attention_mask must be fixed [1,512]")
     if ins["time_ids"]["shape"] != [1,2]: raise ValueError("DreamLite Mobile time_ids must be [1,2]")
 
     ve=comps["vae_encoder"];ve_out=by_key(ve.get("outputs",[]))
