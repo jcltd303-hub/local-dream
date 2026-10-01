@@ -33,7 +33,7 @@ object DreamLiteLiteRt {
         val unet: File,
         val vaeEncoder: File,
         val vaeDecoder: File,
-        val textEncoder: File,
+        val textEncoder: File? = null,
         val abiManifest: File,
         val conditioningLlm: File? = null,
         val conditioningVision: File? = null,
@@ -79,13 +79,16 @@ object DreamLiteLiteRt {
             ?: return ProbeResult.Invalid("missing or invalid DreamLite VAE encoder")
         val vaeDecoder = component(config.dreamliteVaeDecoder)
             ?: return ProbeResult.Invalid("missing or invalid DreamLite VAE decoder")
+        val multimodal = config.dreamliteMultimodalConditioning == true
         val textEncoder = component(config.dreamliteTextEncoder)
-            ?: return ProbeResult.Invalid("missing or invalid DreamLite text encoder")
+        if (!multimodal && textEncoder == null) {
+            return ProbeResult.Invalid("missing or invalid DreamLite text encoder")
+        }
         val abiManifest = component(DreamLiteAbi.MANIFEST)
             ?: return ProbeResult.Invalid("missing or invalid ${DreamLiteAbi.MANIFEST}")
         val conditioningLlm = component(config.dreamliteConditioningLlm)
         val conditioningVision = component(config.dreamliteConditioningVision)
-        if (config.dreamliteMultimodalConditioning == true) {
+        if (multimodal) {
             if (conditioningLlm == null)
                 return ProbeResult.Invalid("missing DreamLite Qwen conditioning LLM")
             if (conditioningVision == null)
@@ -93,7 +96,16 @@ object DreamLiteLiteRt {
         }
         when (val abi = DreamLiteAbi.parse(abiManifest)) {
             is DreamLiteAbi.ParseResult.Invalid -> return ProbeResult.Invalid(abi.reason)
-            is DreamLiteAbi.ParseResult.Valid -> Unit
+            is DreamLiteAbi.ParseResult.Valid -> {
+                val expected = if (multimodal) {
+                    DreamLiteAbi.CONDITIONING_QWEN3_VL_GGUF
+                } else {
+                    DreamLiteAbi.CONDITIONING_LITERT_TEXT
+                }
+                if (abi.manifest.conditioningBackend != expected) {
+                    return ProbeResult.Invalid("DreamLite config/ABI conditioning backend mismatch")
+                }
+            }
         }
 
         return ProbeResult.Ready(
