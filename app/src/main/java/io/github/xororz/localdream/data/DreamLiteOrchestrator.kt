@@ -151,6 +151,10 @@ object DreamLiteOrchestrator {
             "DreamLite scheduler config is required"
         }
         val sigmas = DreamLiteScheduler.schedule(imageSeqLen, scheduler)
+        if (latentShape == null) {
+            state.tensors[MODEL_INPUT_STATE_KEY] = state.tensors[LATENT_STATE_KEY]
+                ?: error("DreamLite pipeline tensor latent is unavailable")
+        }
         if (conditioner != null) {
             conditioner.applyTo(state, requireNotNull(conditioningRequest) {
                 "DreamLite conditioning request is required when a conditioner is supplied"
@@ -172,6 +176,10 @@ object DreamLiteOrchestrator {
                         requireNotNull(outputWidth),
                         requireNotNull(outputHeight),
                     )
+                } else {
+                    pipeline.tensors[MODEL_INPUT_STATE_KEY] =
+                        pipeline.tensors[LATENT_STATE_KEY]
+                            ?: error("DreamLite pipeline tensor latent is unavailable")
                 }
             },
             skipTextEncoder = conditioner != null,
