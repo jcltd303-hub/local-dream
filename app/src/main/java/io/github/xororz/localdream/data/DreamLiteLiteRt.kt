@@ -62,6 +62,10 @@ object DreamLiteLiteRt {
             ?: return ProbeResult.Invalid("missing or invalid DreamLite text encoder")
         val abiManifest = component("ABI manifest", DreamLiteAbi.MANIFEST)
             ?: return ProbeResult.Invalid("missing or invalid ${DreamLiteAbi.MANIFEST}")
+        when (val abi = DreamLiteAbi.parse(abiManifest)) {
+            is DreamLiteAbi.ParseResult.Invalid -> return ProbeResult.Invalid(abi.reason)
+            is DreamLiteAbi.ParseResult.Valid -> Unit
+        }
 
         return ProbeResult.Ready(
             Package(unet, vaeEncoder, vaeDecoder, textEncoder, abiManifest),
