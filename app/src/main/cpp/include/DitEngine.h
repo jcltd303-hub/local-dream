@@ -106,7 +106,9 @@ typedef struct {
   const uint8_t *reference_image_rgb;
   int reference_width;
   int reference_height;
-  int drop_prefix_tokens;
+  // Reserved for ABI stability. stable-diffusion.cpp returns post-template
+  // hidden states already; callers must leave this at zero.
+  int reserved_drop_prefix_tokens;
 } dit_condition_params;
 
 typedef struct {
