@@ -156,7 +156,7 @@ diff --git a/src/stable-diffusion.cpp b/src/stable-diffusion.cpp
  #define NONE_STR "NONE"
  
  static float get_cache_reuse_threshold(const sd_cache_params_t& params) {
-@@ -628,10 +629,22 @@
+@@ -628,18 +629,78 @@
          free(sd_ctx);
          return nullptr;
      }
@@ -164,6 +164,14 @@ diff --git a/src/stable-diffusion.cpp b/src/stable-diffusion.cpp
 -}
 -
 -void free_sd_ctx(sd_ctx_t* sd_ctx) {
+-    if (sd_ctx->sd != nullptr) {
+-        delete sd_ctx->sd;
+-        sd_ctx->sd = nullptr;
+-    }
+-    free(sd_ctx);
+-}
+-
+-SD_API void sd_cancel_generation
 +    return sd_ctx;
 +}
 +
@@ -180,17 +188,10 @@ diff --git a/src/stable-diffusion.cpp b/src/stable-diffusion.cpp
 +}
 +
 +void free_sd_ctx(sd_ctx_t* sd_ctx) {
-     if (sd_ctx->sd != nullptr) {
-         delete sd_ctx->sd;
-         sd_ctx->sd = nullptr;
-@@ -636,10 +649,68 @@
-         delete sd_ctx->sd;
-         sd_ctx->sd = nullptr;
-     }
--    free(sd_ctx);
--}
--
--SD_API void sd_cancel_generation
++    if (sd_ctx->sd != nullptr) {
++        delete sd_ctx->sd;
++        sd_ctx->sd = nullptr;
++    }
 +    free(sd_ctx);
 +}
 +
@@ -202,23 +203,17 @@ diff --git a/src/stable-diffusion.cpp b/src/stable-diffusion.cpp
 +        output == nullptr || sd_ctx->sd->cond_stage_model == nullptr) return false;
 +    StableDiffusionGGML::ExecutionScope execution(*sd_ctx->sd);
 +    if (!execution.ready) return false;
-+
 +    std::vector<sd::Tensor<float>> refs;
 +    if (params->reference_image.data != nullptr && params->reference_image.width > 0 &&
 +        params->reference_image.height > 0 && params->reference_image.channel >= 3) {
-+        const int64_t width = params->reference_image.width;
-+        const int64_t height = params->reference_image.height;
++        const int64_t width = params->reference_image.width, height = params->reference_image.height;
 +        const int channels = params->reference_image.channel;
 +        sd::Tensor<float> image({width, height, 3, 1});
 +        const int64_t pixels = width * height;
-+        for (int64_t p = 0; p < pixels; ++p) {
-+            for (int ch = 0; ch < 3; ++ch) {
-+                image[p + ch * pixels] = params->reference_image.data[p * channels + ch] / 255.0f;
-+            }
-+        }
++        for (int64_t p = 0; p < pixels; ++p) for (int ch = 0; ch < 3; ++ch)
++            image[p + ch * pixels] = params->reference_image.data[p * channels + ch] / 255.0f;
 +        refs.emplace_back(std::move(image));
 +    }
-+
 +    ConditionerParams cp;
 +    cp.text = params->prompt == nullptr ? "" : params->prompt;
 +    cp.ref_images = refs.empty() ? nullptr : &refs;
@@ -228,16 +223,12 @@ diff --git a/src/stable-diffusion.cpp b/src/stable-diffusion.cpp
 +    cp.ref_image_params.vlm_max_size = 256;
 +    SDCondition condition = sd_ctx->sd->cond_stage_model->get_learned_condition(sd_ctx->sd->n_threads, cp);
 +    if (condition.c_crossattn.empty() || condition.c_crossattn.dim() < 2) return false;
-+
 +    const int hidden = static_cast<int>(condition.c_crossattn.shape()[0]);
 +    const int sequence = static_cast<int>(condition.c_crossattn.shape()[1]);
 +    const size_t count = static_cast<size_t>(hidden) * sequence;
 +    output->hidden_states = static_cast<float*>(malloc(count * sizeof(float)));
 +    output->attention_mask = static_cast<float*>(malloc(static_cast<size_t>(sequence) * sizeof(float)));
-+    if (output->hidden_states == nullptr || output->attention_mask == nullptr) {
-+        sd_free_condition(output);
-+        return false;
-+    }
++    if (output->hidden_states == nullptr || output->attention_mask == nullptr) { sd_free_condition(output); return false; }
 +    memcpy(output->hidden_states, condition.c_crossattn.values().data(), count * sizeof(float));
 +    std::fill(output->attention_mask, output->attention_mask + sequence, 1.0f);
 +    output->sequence_length = sequence;
@@ -328,14 +319,14 @@ diff --git a/src/conditioning/conditioner.hpp b/src/conditioning/conditioner.hpp
      int width                                                           = -1;
      int height                                                          = -1;
 -    bool zero_out_masked                                                = false;
--    const std::vector<sd::Tensor<float>>* ref_images
+-    const std::vector<sd::Tensor<float>>* ref_images                    = nullptr;  // for qwen image edit
 +    bool zero_out_masked                                                = false;
 +    bool dreamlite_mode                                                 = false;
-+    const std::vector<sd::Tensor<float>>* ref_images
++    const std::vector<sd::Tensor<float>>* ref_images                    = nullptr;  // for qwen image edit
      const std::vector<MiniMaxH3PresentationItem>* minimax_h3_references = nullptr;
      RefImageParams ref_image_params;
  };
-@@ -2309,62 +2310,90 @@
+@@ -2309,62 +2310,77 @@
              prompt += conditioner_params.text;
              prompt_attn_range = {0, 0};
              prompt += "<|im_end|>\n<|im_start|>assistant\n";
@@ -396,10 +387,8 @@ diff --git a/src/conditioning/conditioner.hpp b/src/conditioning/conditioner.hpp
 -            prompt += "<|im_end|>\n<|im_start|>assistant\n";
 -
 +        } else if (version == VERSION_QWEN_IMAGE_2_1) {
-+            const bool has_ref = llm->enable_vision && conditioner_params.ref_images != nullptr &&
-+                                 !conditioner_params.ref_images->empty();
-+            if (!llm->enable_vision && conditioner_params.ref_images != nullptr &&
-+                !conditioner_params.ref_images->empty()) {
++            const bool has_ref = llm->enable_vision && conditioner_params.ref_images != nullptr && !conditioner_params.ref_images->empty();
++            if (!llm->enable_vision && conditioner_params.ref_images != nullptr && !conditioner_params.ref_images->empty()) {
 +                LOG_ERROR("Qwen Image 2.1 editing requires Qwen3-VL vision weights; provide --llm_vision or a combined encoder");
 +                return {};
 +            }
@@ -408,14 +397,9 @@ diff --git a/src/conditioning/conditioner.hpp b/src/conditioning/conditioner.hpp
 +                if (has_ref) {
 +                    prompt_template_encode_start_idx = 64;
 +                    prompt = "<|im_start|>system\nDescribe the key features of the input image (color, shape, size, texture, objects, background), then explain how the user's text instruction should alter or modify the image. Generate a new image that meets the user's requirements while maintaining consistency with the original input where appropriate.<|im_end|>\n<|im_start|>user\n<|vision_start|>";
-+                    const auto& source = conditioner_params.ref_images->front();
-+                    auto image = source;
-+                    if (image.shape()[0] != 256 || image.shape()[1] != 256) {
-+                        image = sd::ops::interpolate(image, {256, 256, image.shape()[2], image.shape()[3]});
-+                    }
-+                    const int64_t width = image.shape()[0];
-+                    const int64_t height = image.shape()[1];
-+                    const int64_t pixels = width * height;
++                    auto image = conditioner_params.ref_images->front();
++                    if (image.shape()[0] != 256 || image.shape()[1] != 256) image = sd::ops::interpolate(image, {256, 256, image.shape()[2], image.shape()[3]});
++                    const int64_t width = image.shape()[0], height = image.shape()[1], pixels = width * height;
 +                    auto rgb = sd::Tensor<float>({width, height, 3, 1});
 +                    for (int64_t p = 0; p < pixels; ++p) {
 +                        float alpha = image.shape()[2] == 4 ? image[p + 3 * pixels] : 1.f;
@@ -428,22 +412,17 @@ diff --git a/src/conditioning/conditioner.hpp b/src/conditioning/conditioner.hpp
 +                    image_embeds.emplace_back(index, std::move(outputs[0]));
 +                    if (deepstack_image_embeds.empty()) deepstack_image_embeds.resize(outputs.size() - 1);
 +                    for (size_t layer = 1; layer < outputs.size(); ++layer) deepstack_image_embeds[layer - 1].emplace_back(index, std::move(outputs[layer]));
-+                    image_grids.push_back({index, count, static_cast<int>(height) / llm->config.vision.patch_size,
-+                                           static_cast<int>(width) / llm->config.vision.patch_size});
++                    image_grids.push_back({index, count, static_cast<int>(height) / llm->config.vision.patch_size, static_cast<int>(width) / llm->config.vision.patch_size});
 +                    for (int j = 0; j < count; ++j) prompt += "<|image_pad|>";
 +                    prompt += "<|vision_end|>";
-+                    prompt_attn_range.first = static_cast<int>(prompt.size());
-+                    prompt += conditioner_params.text.empty() ? " " : conditioner_params.text;
-+                    prompt_attn_range.second = static_cast<int>(prompt.size());
-+                    prompt += "<|im_end|>\n<|im_start|>assistant\n";
 +                } else {
 +                    prompt_template_encode_start_idx = 34;
 +                    prompt = "<|im_start|>system\nDescribe the image by detailing the color, shape, size, texture, quantity, text, spatial relationships of the objects and background:<|im_end|>\n<|im_start|>user\n";
-+                    prompt_attn_range.first = static_cast<int>(prompt.size());
-+                    prompt += conditioner_params.text.empty() ? " " : conditioner_params.text;
-+                    prompt_attn_range.second = static_cast<int>(prompt.size());
-+                    prompt += "<|im_end|>\n<|im_start|>assistant\n";
 +                }
++                prompt_attn_range.first = static_cast<int>(prompt.size());
++                prompt += conditioner_params.text.empty() ? " " : conditioner_params.text;
++                prompt_attn_range.second = static_cast<int>(prompt.size());
++                prompt += "<|im_end|>\n<|im_start|>assistant\n";
 +            } else {
 +                prompt = "<|im_start|>system\nComprehend and analyze the provided prompt.<|im_end|>\n";
 +                auto system_tokens = tokenizer->encode(prompt, nullptr);
@@ -467,8 +446,7 @@ diff --git a/src/conditioning/conditioner.hpp b/src/conditioning/conditioner.hpp
 +                        image_embeds.emplace_back(index, std::move(outputs[0]));
 +                        if (deepstack_image_embeds.empty()) deepstack_image_embeds.resize(outputs.size() - 1);
 +                        for (size_t layer = 1; layer < outputs.size(); ++layer) deepstack_image_embeds[layer - 1].emplace_back(index, std::move(outputs[layer]));
-+                        image_grids.push_back({index, count, static_cast<int>(height) / llm->config.vision.patch_size,
-+                                               static_cast<int>(width) / llm->config.vision.patch_size});
++                        image_grids.push_back({index, count, static_cast<int>(height) / llm->config.vision.patch_size, static_cast<int>(width) / llm->config.vision.patch_size});
 +                        for (int j = 0; j < count; ++j) prompt += "<|image_pad|>";
 +                        prompt += "<|vision_end|>";
 +                    }
