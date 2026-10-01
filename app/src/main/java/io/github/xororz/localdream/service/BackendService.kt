@@ -9,6 +9,8 @@ import io.github.xororz.localdream.BuildConfig
 import io.github.xororz.localdream.R
 import io.github.xororz.localdream.data.DitEngine
 import io.github.xororz.localdream.data.DitResolution
+import io.github.xororz.localdream.data.DreamLiteLiteRt
+import io.github.xororz.localdream.data.DreamLiteRuntimeFactory
 import io.github.xororz.localdream.data.Model
 import io.github.xororz.localdream.data.ModelConfig
 import java.io.File
@@ -482,20 +484,21 @@ class BackendService : Service() {
             // stable-diffusion/QNN executable. Recognizing a package is not the
             // same as having an executable LiteRT backend. Fail closed until the
             // dedicated Android runner is installed and validated.
-            if (backendType == "dreamlite_litert") {
+            if (backendType == DreamLiteLiteRt.RUNTIME) {
                 val packageConfig = ModelConfig.read(modelsDir)
-                val required = listOf(
-                    packageConfig?.dreamliteUnet,
-                    packageConfig?.dreamliteVaeEncoder,
-                    packageConfig?.dreamliteVaeDecoder,
-                    packageConfig?.dreamliteTextEncoder,
-                )
-                val packageReady = packageConfig?.runtime == "dreamlite_litert" &&
-                    required.all { name -> !name.isNullOrBlank() && File(modelsDir, name).isFile }
-                val message = if (packageReady) {
-                    "DreamLite LiteRT package recognized; Android LiteRT runner not installed yet"
-                } else {
-                    "DreamLite LiteRT package is incomplete"
+                val probe = packageConfig?.let { DreamLiteLiteRt.probe(modelsDir, it) }
+                val message = when (probe) {
+                    is DreamLiteLiteRt.ProbeResult.Ready -> {
+                        when (val runtime = DreamLiteRuntimeFactory.create(probe.modelPackage)) {
+                            is DreamLiteRuntimeFactory.Result.Available -> {
+                                runtime.runtime.close()
+                                "DreamLite LiteRT runtime probe succeeded but generation service is not wired yet"
+                            }
+                            is DreamLiteRuntimeFactory.Result.Unavailable -> runtime.reason
+                        }
+                    }
+                    is DreamLiteLiteRt.ProbeResult.Invalid -> probe.reason
+                    null -> "DreamLite LiteRT config is missing or unreadable"
                 }
                 Log.e(TAG, message)
                 updateState(BackendState.Error(message, modelId))
