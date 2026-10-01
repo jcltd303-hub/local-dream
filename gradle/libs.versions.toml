@@ -24,7 +24,7 @@ paging = "3.3.6"
 ksp = "2.3.8"
 ktlint-gradle = "14.2.0"
 detekt = "1.23.7"
-litert = "2.2.0"
+litert = "2.1.6"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
