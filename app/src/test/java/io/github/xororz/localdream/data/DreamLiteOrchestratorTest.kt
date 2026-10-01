@@ -313,7 +313,7 @@ class DreamLiteOrchestratorTest {
         )
         val conditioner = object : DreamLiteConditioner {
             override fun encode(request: DreamLiteConditioning.Request) =
-                DreamLiteConditioner.Output(floatArrayOf(7f), floatArrayOf(1f), 1, 2048)
+                DreamLiteConditioner.Output(FloatArray(2048) { 7f }, floatArrayOf(1f), 1, 2048)
             override fun close() = Unit
         }
         val state = DreamLiteOrchestrator.PipelineState(
