@@ -2,6 +2,8 @@ package io.github.xororz.localdream.data
 
 import java.io.Closeable
 import java.io.File
+import com.google.ai.edge.litert.Accelerator
+import com.google.ai.edge.litert.CompiledModel
 
 /**
  * Execution boundary for the experimental DreamLite Android backend.
@@ -42,6 +44,26 @@ interface DreamLiteRuntime : Closeable {
  * dependency and converted DreamLite ABI are both pinned. No request may fall
  * back into the QNN Stable Diffusion executable.
  */
+private class LiteRtDreamLiteRuntime(
+    private val models: List<Pair<File, CompiledModel>>,
+    private val compileTime: Long,
+) : DreamLiteRuntime {
+    override fun inspect(): DreamLiteRuntime.Diagnostics =
+        DreamLiteRuntime.Diagnostics(
+            runtime = "litert",
+            accelerator = "npu",
+            components = models.map { (file, _) ->
+                DreamLiteRuntime.ComponentInfo(file, emptyList(), emptyList())
+            },
+            cpuFallback = false,
+            compileTimeMs = compileTime,
+        )
+
+    override fun close() {
+        models.forEach { (_, model) -> model.close() }
+    }
+}
+
 object DreamLiteRuntimeFactory {
     const val REQUIRED_ACCELERATOR = "npu"
     const val CACHE_DIR = "dreamlite_litert_cache"
@@ -110,8 +132,24 @@ object DreamLiteRuntimeFactory {
         if (files.size != 5 || files.any { !it.isFile || it.length() <= 0L }) {
             return Result.Unavailable("DreamLite LiteRT package is no longer valid")
         }
-        return Result.Unavailable(
-            "LiteRT runner not linked yet; refusing CPU/QNN fallback",
-        )
+        val start = System.nanoTime()
+        val compiled = mutableListOf<Pair<File, CompiledModel>>()
+        return try {
+            files.filter { it.extension == "tflite" }.forEach { file ->
+                compiled += file to CompiledModel.create(
+                    file.absolutePath,
+                    CompiledModel.Options(Accelerator.NPU),
+                )
+            }
+            Result.Available(
+                LiteRtDreamLiteRuntime(
+                    compiled,
+                    (System.nanoTime() - start) / 1_000_000L,
+                ),
+            )
+        } catch (e: Exception) {
+            compiled.forEach { (_, model) -> runCatching { model.close() } }
+            Result.Unavailable("LiteRT NPU compile failed: ${e.message ?: e.javaClass.simpleName}")
+        }
     }
 }
