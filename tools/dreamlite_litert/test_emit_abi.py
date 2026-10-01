@@ -40,3 +40,14 @@ def test_rejects_missing_checkpoint_constant():
         m.write_text(json.dumps(metadata())); c.write_text(json.dumps(bad))
         p=subprocess.run([sys.executable,str(SCRIPT),"--metadata",str(m),"--checkpoint-config",str(c),"--output",str(o)])
         assert p.returncode != 0
+
+def test_emit_native_qwen_without_text_encoder():
+    with tempfile.TemporaryDirectory() as d:
+        d=Path(d); m=d/"m.json"; c=d/"c.json"; o=d/"dreamlite_abi.json"
+        meta=metadata(); del meta["components"]["text_encoder"]
+        m.write_text(json.dumps(meta)); c.write_text(json.dumps(config()))
+        subprocess.run([sys.executable,str(SCRIPT),"--metadata",str(m),"--checkpoint-config",str(c),
+                        "--conditioning-backend","qwen3_vl_gguf","--output",str(o)],check=True)
+        out=json.loads(o.read_text())
+        assert out["conditioning_backend"]=="qwen3_vl_gguf"
+        assert "text_encoder" not in out["components"]
