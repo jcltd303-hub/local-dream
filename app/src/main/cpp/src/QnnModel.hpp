@@ -389,6 +389,56 @@ class QnnModel : public QnnSampleApp {
     return StatusCode::SUCCESS;
   }
 
+  struct TensorOutput {
+    std::string name;
+    std::vector<uint32_t> dims;
+    std::vector<float> values;
+  };
+
+  // Generic single-input / multi-output runner for vision detectors such as
+  // SCRFD. Tensor metadata is returned with every output so callers can decode
+  // feature-map heads by name and shape instead of relying on positional order.
+  StatusCode executeMultiOutputGraph(const float *input, size_t input_elems,
+                                     std::vector<TensorOutput> &result) {
+    result.clear();
+    if (!input || !ensureIoTensors()) return StatusCode::FAILURE;
+    auto graphInfo = (*m_graphsInfo)[0];
+    if (graphInfo.numInputTensors != 1 || graphInfo.numOutputTensors == 0) {
+      QNN_ERROR("multi-output graph expects 1 input and >=1 outputs, got %u/%u",
+                graphInfo.numInputTensors, graphInfo.numOutputTensors);
+      return StatusCode::FAILURE;
+    }
+    const size_t expected = tensorElems(inputs[0]);
+    if (expected != input_elems) {
+      QNN_ERROR("multi-output input shape mismatch: graph=%zu caller=%zu",
+                expected, input_elems);
+      return StatusCode::FAILURE;
+    }
+    if (m_ioTensor.copyFromFloatToNative(const_cast<float *>(input), &inputs[0]) !=
+        qnn::tools::iotensor::StatusCode::SUCCESS)
+      return StatusCode::FAILURE;
+    if (!runGraph(graphInfo, "vision detector"))
+      return StatusCode::FAILURE;
+
+    result.reserve(graphInfo.numOutputTensors);
+    for (uint32_t i = 0; i < graphInfo.numOutputTensors; ++i) {
+      TensorOutput out;
+      const char *name = QNN_TENSOR_GET_NAME(outputs[i]);
+      out.name = name ? name : "";
+      const uint32_t rank = QNN_TENSOR_GET_RANK(outputs[i]);
+      const uint32_t *dims = QNN_TENSOR_GET_DIMENSIONS(outputs[i]);
+      if (dims && rank > 0) out.dims.assign(dims, dims + rank);
+      out.values.resize(tensorElems(outputs[i]));
+      if (m_ioTensor.convertToFloatInto(out.values.data(), &outputs[i]) !=
+          qnn::tools::iotensor::StatusCode::SUCCESS) {
+        result.clear();
+        return StatusCode::FAILURE;
+      }
+      result.push_back(std::move(out));
+    }
+    return StatusCode::SUCCESS;
+  }
+
   StatusCode executeVaeEncoderGraphs(float *pixel_values, float *mean,
                                      float *std) {
     auto returnStatus = StatusCode::SUCCESS;
