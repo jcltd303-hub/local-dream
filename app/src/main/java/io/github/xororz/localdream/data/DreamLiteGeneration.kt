@@ -40,6 +40,9 @@ object DreamLiteGeneration {
             state.tensors[DreamLiteOrchestrator.REFERENCE_IMAGE_STATE_KEY] =
                 request.referenceRgb!!.map { (it.toInt() and 0xff) / 127.5f - 1f }.toFloatArray()
         }
+        require(conditioner != null) {
+            "DreamLite generation requires the Qwen3-VL conditioner; text-only fallback is not reference-equivalent"
+        }
         val conditioningRequest = DreamLiteConditioning.Request(
             if (hasReference) DreamLiteConditioning.Mode.EDIT else DreamLiteConditioning.Mode.GENERATE,
             request.prompt,
@@ -57,7 +60,7 @@ object DreamLiteGeneration {
             outputWidth = request.width,
             outputHeight = request.height,
             conditioner = conditioner,
-            conditioningRequest = conditioningRequest.takeIf { conditioner != null },
+            conditioningRequest = conditioningRequest,
         )
         return state.tensors["image"]
             ?: error("DreamLite VAE decoder did not produce image")
