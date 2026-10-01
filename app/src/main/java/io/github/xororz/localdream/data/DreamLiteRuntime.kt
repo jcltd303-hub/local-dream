@@ -36,6 +36,9 @@ interface DreamLiteRuntime : Closeable {
 
     fun inspect(): Diagnostics
 
+    /** Executes one converted component. Float32 is the frozen ABI v1 data path. */
+    fun runFloatComponent(component: String, inputs: Map<String, FloatArray>): Map<String, FloatArray>
+
     override fun close() = Unit
 }
 
@@ -92,6 +95,44 @@ private class LiteRtDreamLiteRuntime(
             cpuFallback = true,
             compileTimeMs = compileTime,
         )
+
+    override fun runFloatComponent(
+        component: String,
+        inputs: Map<String, FloatArray>,
+    ): Map<String, FloatArray> {
+        val pair = models.firstOrNull { (file, _) ->
+            file.nameWithoutExtension == component ||
+                file.nameWithoutExtension.contains(component, ignoreCase = true)
+        } ?: error("DreamLite component $component is not compiled")
+        val model = pair.second
+        val abi = manifest.components[component]
+            ?: error("DreamLite ABI has no component $component")
+        require(abi.inputs.all { it.dataType.equals("float32", ignoreCase = true) }) {
+            "DreamLite ABI v1 execution currently supports float32 inputs only"
+        }
+        require(abi.outputs.all { it.dataType.equals("float32", ignoreCase = true) }) {
+            "DreamLite ABI v1 execution currently supports float32 outputs only"
+        }
+        require(inputs.keys == abi.inputs.map { it.name }.toSet()) {
+            "DreamLite $component input names do not match ABI"
+        }
+
+        val inputBuffers = abi.inputs.associate { tensor ->
+            tensor.name to model.createInputBuffer(tensor.name).also {
+                it.writeFloat(inputs.getValue(tensor.name))
+            }
+        }
+        val outputBuffers = abi.outputs.associate { tensor ->
+            tensor.name to model.createOutputBuffer(tensor.name)
+        }
+        return try {
+            model.run(inputBuffers, outputBuffers)
+            outputBuffers.mapValues { (_, buffer) -> buffer.readFloat() }
+        } finally {
+            inputBuffers.values.forEach { runCatching { it.close() } }
+            outputBuffers.values.forEach { runCatching { it.close() } }
+        }
+    }
 
     override fun close() {
         models.forEach { (_, model) -> model.close() }
