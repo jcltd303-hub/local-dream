@@ -54,6 +54,35 @@ class DreamLiteOrchestratorTest {
     }
 
     @Test
+    fun componentRoutingUsesExplicitStateKeys() {
+        val runtime = object : DreamLiteRuntime {
+            override fun inspect() = DreamLiteRuntime.Diagnostics(
+                "test", "npu", emptyList(), false
+            )
+            override fun runFloatComponent(
+                component: String,
+                inputs: Map<String, FloatArray>,
+            ): Map<String, FloatArray> {
+                assertEquals(7f, inputs.getValue("model_input")[0])
+                return mapOf("model_output" to floatArrayOf(9f))
+            }
+        }
+        val manifest = DreamLiteAbi.Manifest(
+            mapOf(
+                "unet" to DreamLiteAbi.Component(
+                    listOf(DreamLiteAbi.Tensor("model_input", "float32", listOf(1), "latent")),
+                    listOf(DreamLiteAbi.Tensor("model_output", "float32", listOf(1), "next_latent")),
+                )
+            )
+        )
+        val state = DreamLiteOrchestrator.PipelineState(
+            linkedMapOf("latent" to floatArrayOf(7f))
+        )
+        DreamLiteOrchestrator.runComponent(runtime, manifest, "unet", state)
+        assertEquals(9f, state.tensors.getValue("next_latent")[0])
+    }
+
+    @Test
     fun editEncodesReferenceBeforeDenoising() {
         val plan = DreamLiteOrchestrator.plan(true)
         assertTrue(plan.hasReferenceImage)
