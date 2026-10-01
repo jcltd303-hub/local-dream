@@ -28,6 +28,8 @@ interface DreamLiteRuntime : Closeable {
         val accelerator: String,
         val components: List<ComponentInfo>,
         val cpuFallback: Boolean,
+        val compileTimeMs: Long? = null,
+        val cacheHit: Boolean? = null,
     )
 
     fun inspect(): Diagnostics
@@ -41,6 +43,9 @@ interface DreamLiteRuntime : Closeable {
  * back into the QNN Stable Diffusion executable.
  */
 object DreamLiteRuntimeFactory {
+    const val REQUIRED_ACCELERATOR = "npu"
+    const val CACHE_DIR = "dreamlite_litert_cache"
+
     sealed interface Result {
         data class Available(val runtime: DreamLiteRuntime) : Result
         data class Unavailable(val reason: String) : Result
