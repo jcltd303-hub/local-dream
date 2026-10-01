@@ -443,6 +443,11 @@ bool engine_condition_standalone(dit_condition_ctx *ctx,
   return true;
 }
 
+const char *engine_condition_last_error(const dit_condition_ctx *ctx) {
+  if (!ctx) return g_create_error.c_str();
+  return ctx->last_error.c_str();
+}
+
 const char *engine_last_error(const dit_ctx *ctx) {
   if (!ctx) return g_create_error.c_str();
   return ctx->last_error.c_str();
@@ -470,6 +475,7 @@ const dit_engine_api g_api = {
     engine_condition_standalone,
     engine_free_condition,
     engine_last_error,
+    engine_condition_last_error,
     engine_set_log_callback,
     engine_set_preview_interval,
 };
