@@ -33,6 +33,13 @@ data class ModelConfig(
     // ABI identifier prevents loading an adapter compiled for a different
     // conditioning scheme (Plus/FaceID/InstantID are intentionally distinct).
     val identityAdapterType: String? = null,
+    // Optional alternate runtime. dreamlite_litert is experimental and keeps
+    // DreamLite separate from the existing QNN SD/DiT ABIs.
+    val runtime: String? = null,
+    val dreamliteUnet: String? = null,
+    val dreamliteVaeEncoder: String? = null,
+    val dreamliteVaeDecoder: String? = null,
+    val dreamliteTextEncoder: String? = null,
 ) {
     /** Field-by-field merge: values from this win, [other] fills the nulls. */
     fun withFallback(other: ModelConfig): ModelConfig = ModelConfig(
@@ -46,6 +53,11 @@ data class ModelConfig(
         identityAdapter = identityAdapter ?: other.identityAdapter,
         identityAdapterScale = identityAdapterScale ?: other.identityAdapterScale,
         identityAdapterType = identityAdapterType ?: other.identityAdapterType,
+        runtime = runtime ?: other.runtime,
+        dreamliteUnet = dreamliteUnet ?: other.dreamliteUnet,
+        dreamliteVaeEncoder = dreamliteVaeEncoder ?: other.dreamliteVaeEncoder,
+        dreamliteVaeDecoder = dreamliteVaeDecoder ?: other.dreamliteVaeDecoder,
+        dreamliteTextEncoder = dreamliteTextEncoder ?: other.dreamliteTextEncoder,
     )
 
     /** Fill any remaining nulls from the global defaults. */
@@ -93,6 +105,12 @@ data class ModelConfig(
                         ?.coerceIn(0f, 2f),
                     identityAdapterType = json.optStringOrNull("identity_adapter_type")
                         ?.takeIf { it == "ip_adapter_sd15" },
+                    runtime = json.optStringOrNull("runtime")
+                        ?.takeIf { it == "dreamlite_litert" },
+                    dreamliteUnet = json.optStringOrNull("dreamlite_unet"),
+                    dreamliteVaeEncoder = json.optStringOrNull("dreamlite_vae_encoder"),
+                    dreamliteVaeDecoder = json.optStringOrNull("dreamlite_vae_decoder"),
+                    dreamliteTextEncoder = json.optStringOrNull("dreamlite_text_encoder"),
                     scheduler = json.optStringOrNull("default_scheduler")?.let { value ->
                         value.takeIf { it in VALID_SCHEDULERS }.also {
                             if (it == null) Log.w(TAG, "ignore unknown scheduler '$value' in ${file.path}")
