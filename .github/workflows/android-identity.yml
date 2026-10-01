@@ -2,7 +2,7 @@ name: Android Identity Build
 
 on:
   push:
-    branches: [master, feat/autonomous-asset-runner]
+    branches: [master, feat/identity-reference, feat/autonomous-asset-runner]
   pull_request:
     branches: [master]
   workflow_dispatch:
@@ -29,14 +29,8 @@ jobs:
             app/src/main/cpp/3rdparty/xtensor-blas \
             app/src/main/cpp/3rdparty/tokenizers-cpp \
             app/src/main/cpp/3rdparty/stable-diffusion.cpp
-      - name: Check stable-diffusion.cpp patch drift
-        shell: bash
-        run: |
-          if git -C app/src/main/cpp/3rdparty/stable-diffusion.cpp apply --check ../../dit/stable-diffusion.cpp.patch; then
-            echo "Native patch applies cleanly."
-          else
-            echo "::warning::Native patch has drifted against the pinned submodule; continuing with Kotlin/unit validation."
-          fi
+      - name: Validate stable-diffusion.cpp patch
+        run: git -C app/src/main/cpp/3rdparty/stable-diffusion.cpp apply --check ../../dit/stable-diffusion.cpp.patch
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
