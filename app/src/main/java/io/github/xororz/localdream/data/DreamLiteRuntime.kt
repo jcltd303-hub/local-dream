@@ -56,7 +56,10 @@ private class LiteRtDreamLiteRuntime(
             components = models.map { (file, _) ->
                 DreamLiteRuntime.ComponentInfo(file, emptyList(), emptyList())
             },
-            cpuFallback = false,
+            // LiteRT currently adds CPU when NPU-only is requested so partially
+            // compiled graphs can still execute. Until delegation metrics prove
+            // every node is accelerated, fail closed instead of claiming NPU-only.
+            cpuFallback = true,
             compileTimeMs = compileTime,
         )
 
@@ -72,7 +75,12 @@ object DreamLiteRuntimeFactory {
     // Required at runtime for the Qualcomm LiteRT path. QNN core libraries are
     // already packaged by the app; the LiteRT dispatch/compiler libraries are
     // supplied by a LiteRT Qualcomm runtime bundle during QNN-enabled builds.
-    val requiredQnnLibraries = listOf("libQnnHtp.so", "libQnnSystem.so")
+    val requiredQnnLibraries = listOf(
+        "libQnnHtp.so",
+        "libQnnSystem.so",
+        "libLiteRtDispatch_Qualcomm.so",
+        "libLiteRtCompilerPlugin_Qualcomm.so",
+    )
 
     fun missingQnnLibraries(runtimeDir: File): List<String> =
         requiredQnnLibraries.filterNot { File(runtimeDir, it).isFile }
