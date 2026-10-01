@@ -86,6 +86,51 @@ object DreamLiteOrchestrator {
     const val CONDITIONING_STATE_KEY = "conditioning"
     const val ATTENTION_MASK_STATE_KEY = "attention_mask"
     const val TIME_IDS_STATE_KEY = "time_ids"
+    const val REFERENCE_LATENT_STATE_KEY = "reference_latent"
+
+    data class LatentShape(
+        val batch: Int = 1,
+        val channels: Int = 4,
+        val height: Int,
+        val width: Int,
+    )
+
+    fun prepareSpatialConditioning(
+        state: PipelineState,
+        shape: LatentShape,
+        outputWidth: Int,
+        outputHeight: Int,
+    ) {
+        val latent = state.tensors[LATENT_STATE_KEY]
+            ?: error("DreamLite pipeline tensor latent is unavailable")
+        val reference = state.tensors[REFERENCE_LATENT_STATE_KEY]
+            ?: FloatArray(latent.size)
+        state.tensors[MODEL_INPUT_STATE_KEY] = DreamLiteTensorOps.concatWidth(
+            latent,
+            reference,
+            shape.batch,
+            shape.channels,
+            shape.height,
+            shape.width,
+        )
+        state.tensors[TIME_IDS_STATE_KEY] = DreamLiteTensorOps.timeIds(outputWidth, outputHeight)
+    }
+
+    fun cropModelOutputToLatent(
+        state: PipelineState,
+        shape: LatentShape,
+    ) {
+        val modelOutput = state.tensors[MODEL_OUTPUT_STATE_KEY]
+            ?: error("DreamLite pipeline tensor model_output is unavailable")
+        state.tensors[MODEL_OUTPUT_STATE_KEY] = DreamLiteTensorOps.cropNoiseToLatentWidth(
+            modelOutput,
+            shape.batch,
+            shape.channels,
+            shape.height,
+            shape.width * 2,
+            shape.width,
+        )
+    }
 
     fun executeScheduledRuntime(
         plan: Plan,
