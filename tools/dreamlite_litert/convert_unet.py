@@ -18,7 +18,7 @@ class UNetWrapper(torch.nn.Module):
             return_dict=False,
         )[0]
 
-def sample_inputs(seq=77, seed=0):
+def sample_inputs(seq=512, seed=0):
     g=torch.Generator().manual_seed(seed)
     return (
       torch.randn(1,4,128,256,generator=g),
@@ -57,8 +57,8 @@ def main():
       "inputs":[
         {"name":"sample","dtype":"float32","shape":[1,4,128,256],"state_key":"model_input"},
         {"name":"timestep","dtype":"float32","shape":[1],"state_key":"timestep"},
-        {"name":"encoder_hidden_states","dtype":"float32","shape":[1,77,2048],"state_key":"conditioning"},
-        {"name":"encoder_attention_mask","dtype":"float32","shape":[1,77],"state_key":"attention_mask"},
+        {"name":"encoder_hidden_states","dtype":"float32","shape":[1,512,2048],"state_key":"conditioning"},
+        {"name":"encoder_attention_mask","dtype":"float32","shape":[1,512],"state_key":"attention_mask"},
         {"name":"time_ids","dtype":"float32","shape":[1,2],"state_key":"time_ids"}],
       "outputs":[{"name":"noise_pred","dtype":"float32","shape":list(reference.shape),"state_key":"model_output"}]}
     Path(a.metadata).write_text(json.dumps(meta,indent=2)+"\n")
