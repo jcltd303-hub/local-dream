@@ -14,12 +14,13 @@ object DreamLiteConditioning {
     data class Prepared(
         val prompt: String,
         val requiresVision: Boolean,
+        val dropPrefixTokens: Int,
     )
 
     fun prepare(request: Request): Prepared {
         require(request.prompt.isNotBlank()) { "DreamLite prompt must not be blank" }
         return when (request.mode) {
-            Mode.GENERATE -> Prepared("[Generate]: ${request.prompt}", false)
+            Mode.GENERATE -> Prepared("[Generate]: ${request.prompt}", false, 34)
             Mode.EDIT -> {
                 require(request.referenceRgb != null && request.referenceRgb.isNotEmpty()) {
                     "DreamLite edit conditioning requires a reference image"
@@ -31,6 +32,7 @@ object DreamLiteConditioning {
                     "[Edit]: A diptych with two side-by-side images of the same scene. " +
                         "Compared to the right side, the left one has ${request.prompt}",
                     true,
+                    64,
                 )
             }
         }
