@@ -1,7 +1,6 @@
 package io.github.xororz.localdream.data
 
 import android.content.Context
-import android.util.Log
 import java.io.File
 
 /**
@@ -10,7 +9,6 @@ import java.io.File
  * converted graph ABI is frozen against the PyTorch reference.
  */
 object DreamLiteLiteRt {
-    private const val TAG = "DreamLiteLiteRt"
     const val RUNTIME = "dreamlite_litert"
 
     data class Package(
@@ -48,10 +46,7 @@ object DreamLiteLiteRt {
             val canonical = runCatching { file.canonicalFile }.getOrNull()
                 ?: return null
             // Package metadata must not escape the model directory.
-            if (!canonical.toPath().startsWith(root.toPath())) {
-                Log.w(TAG, "$name escapes model directory: $value")
-                return null
-            }
+            if (!canonical.toPath().startsWith(root.toPath())) return null
             return canonical.takeIf { it.isFile && it.length() > 0L }
         }
 
