@@ -206,3 +206,76 @@ diff --git a/src/stable-diffusion.cpp b/src/stable-diffusion.cpp
 +    free(output->attention_mask);
 +    *output = {};
 +}
+
+diff --git a/include/stable-diffusion.h b/include/stable-diffusion.h
+--- a/include/stable-diffusion.h
++++ b/include/stable-diffusion.h
+@@
+ SD_API void sd_free_condition(sd_condition_output_t* output);
++SD_API sd_ctx_t* new_sd_condition_ctx(const sd_ctx_params_t* params);
+diff --git a/src/pipeline/diffusion_engine.h b/src/pipeline/diffusion_engine.h
+--- a/src/pipeline/diffusion_engine.h
++++ b/src/pipeline/diffusion_engine.h
+@@
+     bool init(const sd_ctx_params_t* sd_ctx_params);
++    bool init_conditioner_only(const sd_ctx_params_t* sd_ctx_params);
+diff --git a/src/pipeline/diffusion_engine.cpp b/src/pipeline/diffusion_engine.cpp
+--- a/src/pipeline/diffusion_engine.cpp
++++ b/src/pipeline/diffusion_engine.cpp
+@@
+ bool StableDiffusionGGML::init(const sd_ctx_params_t* sd_ctx_params) {
+@@
+ }
++
++bool StableDiffusionGGML::init_conditioner_only(const sd_ctx_params_t* p) {
++    auto configuration = std::make_unique<ModelConfig>(*p);
++    n_threads = p->n_threads;
++    enable_mmap = p->enable_mmap;
++    disable_prefetch = p->disable_prefetch;
++    disable_segmented_compute = p->disable_segmented_compute;
++    eager_load = p->eager_load;
++    backend_spec = SAFE_STR(p->backend);
++    params_backend_spec = SAFE_STR(p->params_backend);
++    split_mode_spec = SAFE_STR(p->split_mode);
++    model_manager = std::make_shared<ModelManager>();
++    model_manager->set_n_threads(n_threads);
++    model_manager->set_enable_mmap(enable_mmap);
++    model_manager->set_segmented_compute_disabled(disable_segmented_compute);
++    model_manager->set_prefetch_disabled(disable_prefetch);
++    ModelLoader loader;
++    if (!init_model_loader(loader, *configuration)) return false;
++    version = loader.get_sd_version();
++    if (version == VERSION_COUNT) return false;
++    if (!init_backend()) return false;
++    config_ = std::move(configuration);
++    if (!model_manager->set_loader(std::move(loader))) return false;
++    configure_weight_loading();
++    sd::model_builders::CoreRunners runners;
++    if (!sd::model_builders::build_core_runners(model_build_context(), runners))
++        return false;
++    cond_stage_model = std::move(runners.conditioner);
++    if (!cond_stage_model) return false;
++    cond_stage_model->set_max_graph_vram_bytes(
++        max_graph_vram_bytes_for_module(SDBackendModule::TE));
++    return register_runner_params(ModelComponent::Conditioner, cond_stage_model,
++                                  SDBackendModule::TE);
++}
+diff --git a/src/stable-diffusion.cpp b/src/stable-diffusion.cpp
+--- a/src/stable-diffusion.cpp
++++ b/src/stable-diffusion.cpp
+@@
+ sd_ctx_t* new_sd_ctx(const sd_ctx_params_t* sd_ctx_params) {
+@@
+ }
++
++SD_API sd_ctx_t* new_sd_condition_ctx(const sd_ctx_params_t* params) {
++    sd_ctx_t* ctx = static_cast<sd_ctx_t*>(malloc(sizeof(sd_ctx_t)));
++    if (!ctx) return nullptr;
++    ctx->sd = new StableDiffusionGGML();
++    if (!ctx->sd || !ctx->sd->init_conditioner_only(params)) {
++        delete ctx->sd;
++        free(ctx);
++        return nullptr;
++    }
++    return ctx;
++}
