@@ -106,6 +106,7 @@ typedef struct {
   const uint8_t *reference_image_rgb;
   int reference_width;
   int reference_height;
+  int drop_prefix_tokens;
 } dit_condition_params;
 
 typedef struct {
