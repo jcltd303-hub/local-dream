@@ -288,8 +288,10 @@ diff --git a/src/pipeline/diffusion_engine.cpp b/src/pipeline/diffusion_engine.c
 +    model_manager->set_prefetch_disabled(disable_prefetch);
 +    ModelLoader loader;
 +    if (!init_model_loader(loader, *configuration)) return false;
-+    version = loader.get_sd_version();
-+    if (version == VERSION_COUNT) return false;
++    // This context is deliberately conditioner-only: there are no diffusion
++    // tensors from which ModelLoader can infer an SDVersion. DreamLite uses
++    // Qwen3-VL with the Qwen Image 2.1 conditioner implementation.
++    version = VERSION_QWEN_IMAGE_2_1;
 +    if (!init_backend()) return false;
 +    config_ = std::move(configuration);
 +    if (!model_manager->set_loader(std::move(loader))) return false;
