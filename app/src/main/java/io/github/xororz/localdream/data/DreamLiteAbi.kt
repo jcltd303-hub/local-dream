@@ -122,6 +122,27 @@ object DreamLiteAbi {
             }
             parsed[name] = Component(inputs, outputs)
         }
+
+        val unet = parsed.getValue("unet")
+        val unetInputs = unet.inputs.map { it.stateKey }.toSet()
+        val unetOutputs = unet.outputs.map { it.stateKey }.toSet()
+        val requiredUnetInputs = setOf(
+            DreamLiteOrchestrator.LATENT_STATE_KEY,
+            DreamLiteOrchestrator.TIMESTEP_STATE_KEY,
+        )
+        if (!unetInputs.containsAll(requiredUnetInputs) ||
+            DreamLiteOrchestrator.MODEL_OUTPUT_STATE_KEY !in unetOutputs
+        ) {
+            return ParseResult.Invalid(
+                "DreamLite ABI UNet must route latent + timestep inputs and model_output output",
+            )
+        }
+
+        val decoderInputs = parsed.getValue("vae_decoder").inputs.map { it.stateKey }.toSet()
+        if (DreamLiteOrchestrator.LATENT_STATE_KEY !in decoderInputs) {
+            return ParseResult.Invalid("DreamLite ABI VAE decoder must consume latent state")
+        }
+
         return ParseResult.Valid(Manifest(parsed, scheduler))
     }
 }
