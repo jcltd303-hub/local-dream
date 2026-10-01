@@ -134,6 +134,22 @@ data class Model(
 ) {
     val isDit: Boolean get() = ditKind.isNotEmpty()
 
+    val isDreamLiteLiteRt: Boolean
+        get() = configDefaults.runtime == "dreamlite_litert"
+
+    fun hasUsableDreamLiteLiteRtPackage(context: Context): Boolean {
+        if (!isDreamLiteLiteRt) return false
+        val dir = File(getModelsDir(context), id)
+        val required = listOf(
+            configDefaults.dreamliteUnet,
+            configDefaults.dreamliteVaeEncoder,
+            configDefaults.dreamliteVaeDecoder,
+            configDefaults.dreamliteTextEncoder,
+        )
+        return required.all { name -> !name.isNullOrBlank() && File(dir, name).isFile }
+    }
+
+
     // Native multimodal DiTs consume clean reference images directly. Modular
     // SD models expose identity reference only when their package declares both
     // a vision encoder and an adapter graph in config.json.
@@ -153,7 +169,7 @@ data class Model(
     }
 
     val supportsIdentityReference: Boolean
-        get() = supportsNativeReferenceEditing || supportsExternalIdentityAdapter
+        get() = supportsNativeReferenceEditing || supportsExternalIdentityAdapter || isDreamLiteLiteRt
 
     // Per-field priority: code defaults > config.json > global defaults.
     val defaults: GenerationDefaults
@@ -174,6 +190,7 @@ data class Model(
     // Backend --type value; each type implies the full model file layout.
     val backendType: String
         get() = when {
+            isDreamLiteLiteRt -> "dreamlite_litert"
             isDit -> ditKind
             isAnima -> "anima"
             isSdxl -> if (runOnCpu) "sdxlmnn" else "sdxl"
