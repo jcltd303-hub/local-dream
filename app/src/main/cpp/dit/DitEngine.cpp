@@ -377,18 +377,7 @@ bool engine_condition(dit_ctx *ctx, const dit_condition_params *params,
               hidden_count * sizeof(float));
   std::memcpy(out->attention_mask, result.attention_mask.data(),
               result.attention_mask.size() * sizeof(float));
-  const int drop = std::clamp(params->drop_prefix_tokens, 0, result.sequence_length - 1);
-  if (drop > 0) {
-    const int kept = result.sequence_length - drop;
-    const size_t row = static_cast<size_t>(result.hidden_size);
-    std::memmove(out->hidden_states, out->hidden_states + static_cast<size_t>(drop) * row,
-                 static_cast<size_t>(kept) * row * sizeof(float));
-    std::memmove(out->attention_mask, out->attention_mask + drop,
-                 static_cast<size_t>(kept) * sizeof(float));
-    out->sequence_length = kept;
-  } else {
-    out->sequence_length = result.sequence_length;
-  }
+  out->sequence_length = result.sequence_length;
   out->hidden_size = result.hidden_size;
   return true;
 }
@@ -427,18 +416,7 @@ bool engine_condition_standalone(dit_condition_ctx *ctx,
               result.hidden_states.size() * sizeof(float));
   std::memcpy(out->attention_mask, result.attention_mask.data(),
               result.attention_mask.size() * sizeof(float));
-  const int drop = std::clamp(params->drop_prefix_tokens, 0, result.sequence_length - 1);
-  if (drop > 0) {
-    const int kept = result.sequence_length - drop;
-    const size_t row = static_cast<size_t>(result.hidden_size);
-    std::memmove(out->hidden_states, out->hidden_states + static_cast<size_t>(drop) * row,
-                 static_cast<size_t>(kept) * row * sizeof(float));
-    std::memmove(out->attention_mask, out->attention_mask + drop,
-                 static_cast<size_t>(kept) * sizeof(float));
-    out->sequence_length = kept;
-  } else {
-    out->sequence_length = result.sequence_length;
-  }
+  out->sequence_length = result.sequence_length;
   out->hidden_size = result.hidden_size;
   return true;
 }
