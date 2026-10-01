@@ -84,6 +84,8 @@ object DreamLiteOrchestrator {
     const val MODEL_OUTPUT_STATE_KEY = "model_output"
     const val TIMESTEP_STATE_KEY = "timestep"
     const val CONDITIONING_STATE_KEY = "conditioning"
+    const val TOKENS_STATE_KEY = "tokens"
+    const val CONDITIONING_IMAGE_STATE_KEY = "conditioning_image"
     const val ATTENTION_MASK_STATE_KEY = "attention_mask"
     const val TIME_IDS_STATE_KEY = "time_ids"
     const val REFERENCE_LATENT_STATE_KEY = "reference_latent"
