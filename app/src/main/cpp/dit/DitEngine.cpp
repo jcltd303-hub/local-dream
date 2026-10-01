@@ -77,6 +77,11 @@ void image_to_rgb(const sd_image_t &image, size_t pixel_count, uint8_t *rgb) {
 
 }  // namespace
 
+struct dit_condition_ctx {
+  sd_ctx_t *sd = nullptr;
+  std::string last_error;
+};
+
 struct dit_ctx {
   sd_ctx_t *sd = nullptr;
   dit_model_kind kind = DIT_MODEL_Z_IMAGE;
@@ -176,6 +181,32 @@ dit_ctx *engine_create(const dit_ctx_params *params) {
 }
 
 void engine_destroy(dit_ctx *ctx) {
+  if (!ctx) return;
+  if (ctx->sd) free_sd_ctx(ctx->sd);
+  delete ctx;
+}
+
+dit_condition_ctx *engine_create_conditioner(
+    const char *llm_path, const char *llm_vision_path, const char *backend,
+    const char *params_backend, int n_threads) {
+  if (!llm_path || !llm_path[0]) return nullptr;
+  sd_ctx_params_t p;
+  sd_ctx_params_init(&p);
+  p.llm_path = llm_path;
+  p.llm_vision_path = llm_vision_path;
+  p.n_threads = n_threads > 0 ? n_threads : 4;
+  if (backend && backend[0]) p.backend = backend;
+  if (params_backend && params_backend[0]) p.params_backend = params_backend;
+  auto *ctx = new dit_condition_ctx();
+  ctx->sd = new_sd_condition_ctx(&p);
+  if (!ctx->sd) {
+    delete ctx;
+    return nullptr;
+  }
+  return ctx;
+}
+
+void engine_destroy_conditioner(dit_condition_ctx *ctx) {
   if (!ctx) return;
   if (ctx->sd) free_sd_ctx(ctx->sd);
   delete ctx;
@@ -358,6 +389,38 @@ void engine_free_condition(dit_condition_output *out) {
   *out = {};
 }
 
+bool engine_condition_standalone(dit_condition_ctx *ctx,
+                                 const dit_condition_params *params,
+                                 dit_condition_output *out) {
+  if (!ctx || !ctx->sd || !params || !out) return false;
+  *out = {};
+  DreamLiteConditionResult result;
+  std::string error;
+  if (!DreamLiteConditionBridge::encode(
+          ctx->sd, params->prompt ? params->prompt : "",
+          params->reference_image_rgb, params->reference_width,
+          params->reference_height, &result, &error)) {
+    ctx->last_error = error;
+    return false;
+  }
+  out->hidden_states = static_cast<float *>(
+      malloc(result.hidden_states.size() * sizeof(float)));
+  out->attention_mask = static_cast<float *>(
+      malloc(result.attention_mask.size() * sizeof(float)));
+  if (!out->hidden_states || !out->attention_mask) {
+    engine_free_condition(out);
+    ctx->last_error = "conditioning output allocation failed";
+    return false;
+  }
+  std::memcpy(out->hidden_states, result.hidden_states.data(),
+              result.hidden_states.size() * sizeof(float));
+  std::memcpy(out->attention_mask, result.attention_mask.data(),
+              result.attention_mask.size() * sizeof(float));
+  out->sequence_length = result.sequence_length;
+  out->hidden_size = result.hidden_size;
+  return true;
+}
+
 const char *engine_last_error(const dit_ctx *ctx) {
   if (!ctx) return g_create_error.c_str();
   return ctx->last_error.c_str();
@@ -376,10 +439,13 @@ void engine_set_preview_interval(dit_ctx *ctx, int interval) {
 const dit_engine_api g_api = {
     DIT_ENGINE_ABI_VERSION,
     engine_create,
+    engine_create_conditioner,
+    engine_destroy_conditioner,
     engine_destroy,
     engine_generate,
     engine_free_image,
     engine_condition,
+    engine_condition_standalone,
     engine_free_condition,
     engine_last_error,
     engine_set_log_callback,
