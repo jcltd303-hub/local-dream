@@ -54,7 +54,7 @@ class DreamLiteRuntimeTest {
     }
 
     @Test
-    fun rejectsCpuFallbackDiagnostics() {
+    fun recordsCpuFallbackCapabilityWithoutBlockingSoftwareReadiness() {
         val manifest = DreamLiteAbi.Manifest(emptyMap())
         val diagnostics = DreamLiteRuntime.Diagnostics(
             runtime = "litert",
@@ -62,10 +62,8 @@ class DreamLiteRuntimeTest {
             components = emptyList(),
             cpuFallback = true,
         )
-        assertEquals(
-            "DreamLite runtime used CPU fallback",
-            DreamLiteRuntimeFactory.validateDiagnostics(manifest, diagnostics),
-        )
+        assertEquals(null, DreamLiteRuntimeFactory.validateDiagnostics(manifest, diagnostics))
+        assertTrue(diagnostics.cpuFallback)
     }
 
     @Test
