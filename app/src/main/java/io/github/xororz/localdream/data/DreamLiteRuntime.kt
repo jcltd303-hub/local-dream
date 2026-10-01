@@ -47,14 +47,44 @@ interface DreamLiteRuntime : Closeable {
  */
 private class LiteRtDreamLiteRuntime(
     private val models: List<Pair<File, CompiledModel>>,
+    private val manifest: DreamLiteAbi.Manifest,
     private val compileTime: Long,
 ) : DreamLiteRuntime {
+    private fun tensor(
+        name: String,
+        type: com.google.ai.edge.litert.TensorType,
+    ) = DreamLiteRuntime.Tensor(
+        name = name,
+        shape = type.layout?.dimensions ?: emptyList(),
+        dataType = when (type.elementType) {
+            com.google.ai.edge.litert.TensorType.ElementType.FLOAT -> "float32"
+            com.google.ai.edge.litert.TensorType.ElementType.INT -> "int32"
+            com.google.ai.edge.litert.TensorType.ElementType.INT8 -> "int8"
+            com.google.ai.edge.litert.TensorType.ElementType.BOOLEAN -> "bool"
+            com.google.ai.edge.litert.TensorType.ElementType.INT64 -> "int64"
+        },
+    )
+
     override fun inspect(): DreamLiteRuntime.Diagnostics =
         DreamLiteRuntime.Diagnostics(
             runtime = "litert",
             accelerator = "npu",
-            components = models.map { (file, _) ->
-                DreamLiteRuntime.ComponentInfo(file, emptyList(), emptyList())
+            components = models.map { (file, model) ->
+                val name = file.nameWithoutExtension
+                val abi = manifest.components[name]
+                    ?: manifest.components.entries.firstOrNull {
+                        name.contains(it.key, ignoreCase = true)
+                    }?.value
+                    ?: error("DreamLite ABI has no component for $name")
+                DreamLiteRuntime.ComponentInfo(
+                    file = file,
+                    inputs = abi.inputs.map {
+                        tensor(it.name, model.getInputTensorType(it.name))
+                    },
+                    outputs = abi.outputs.map {
+                        tensor(it.name, model.getOutputTensorType(it.name))
+                    },
+                )
             },
             // LiteRT currently adds CPU when NPU-only is requested so partially
             // compiled graphs can still execute. Until delegation metrics prove
@@ -141,6 +171,10 @@ object DreamLiteRuntimeFactory {
         if (files.size != 5 || files.any { !it.isFile || it.length() <= 0L }) {
             return Result.Unavailable("DreamLite LiteRT package is no longer valid")
         }
+        val manifest = when (val parsed = DreamLiteAbi.parse(modelPackage.abiManifest)) {
+            is DreamLiteAbi.ParseResult.Valid -> parsed.manifest
+            is DreamLiteAbi.ParseResult.Invalid -> return Result.Unavailable(parsed.reason)
+        }
         val start = System.nanoTime()
         val compiled = mutableListOf<Pair<File, CompiledModel>>()
         return try {
@@ -153,6 +187,7 @@ object DreamLiteRuntimeFactory {
             Result.Available(
                 LiteRtDreamLiteRuntime(
                     compiled,
+                    manifest,
                     (System.nanoTime() - start) / 1_000_000L,
                 ),
             )
