@@ -3,7 +3,7 @@
 import argparse, json
 from pathlib import Path
 
-REQUIRED_COMPONENTS={"unet","vae_encoder","vae_decoder","text_encoder"}
+REQUIRED_COMPONENTS={"unet","vae_encoder","vae_decoder"}
 UNET_KEYS={"model_input","timestep","conditioning","attention_mask","time_ids"}
 def by_key(xs): return {x["state_key"]:x for x in xs}
 
@@ -22,6 +22,11 @@ def validate(meta):
     hidden=ins["conditioning"]["shape"]
     if len(hidden)!=3 or hidden[-1]!=2048: raise ValueError("DreamLite Mobile conditioning width must be 2048")
     if ins["time_ids"]["shape"] != [1,2]: raise ValueError("DreamLite Mobile time_ids must be [1,2]")
+    text=comps.get("text_encoder")
+    if text is not None:
+        tins=by_key(text.get("inputs",[])); touts=by_key(text.get("outputs",[]))
+        if "tokens" not in tins or "conditioning" not in touts or "attention_mask" not in touts:
+            raise ValueError("DreamLite text encoder semantic routes are invalid")
     return meta
 
 def main():
