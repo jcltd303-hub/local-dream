@@ -201,7 +201,7 @@ class DreamLiteOrchestratorTest {
         )
         val sigmas = DreamLiteScheduler.schedule(256, manifest.scheduler!!)
         DreamLiteOrchestrator.executeRuntime(
-            DreamLiteOrchestrator.plan(false),
+            DreamLiteOrchestrator.Plan(false, List(4) { DreamLiteOrchestrator.Stage.UNET } + DreamLiteOrchestrator.Stage.VAE_DECODER),
             runtime,
             manifest,
             state,
