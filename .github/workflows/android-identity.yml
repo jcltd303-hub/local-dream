@@ -34,6 +34,8 @@ jobs:
           distribution: temurin
           java-version: "17"
           cache: gradle
+      - name: Install conversion test dependency
+        run: python -m pip install pytest
       - name: Test DreamLite conversion tooling
         run: python -m pytest -q tools/dreamlite_litert/test_emit_abi.py tools/dreamlite_litert/test_validate_metadata.py
       - name: Compile Kotlin
