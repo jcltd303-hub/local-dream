@@ -180,7 +180,7 @@ class DreamLiteOrchestratorTest {
                 ),
                 "unet" to DreamLiteAbi.Component(
                     listOf(
-                        DreamLiteAbi.Tensor("latent", "float32", listOf(1), "latent"),
+                        DreamLiteAbi.Tensor("latent", "float32", listOf(1), "model_input"),
                         DreamLiteAbi.Tensor("timestep", "float32", listOf(1), "timestep"),
                     ),
                     listOf(DreamLiteAbi.Tensor("noise", "float32", listOf(1), "model_output")),
