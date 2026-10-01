@@ -94,15 +94,20 @@ object DreamLiteOrchestrator {
             "DreamLite scheduler config is required"
         }.toRuntimeConfig()
         val sigmas = DreamLiteScheduler.schedule(imageSeqLen, scheduler)
-        return executeRuntime(plan, runtime, manifest, state) { step, pipeline ->
-            val sigma = sigmas[step]
-            pipeline.tensors[TIMESTEP_STATE_KEY] =
-                floatArrayOf(DreamLiteScheduler.timestep(sigma, scheduler))
-        }.also { pipeline ->
-            // Each UNet pass must be followed by its corresponding Euler update.
-            // The actual update is applied by executeScheduledStep below when
-            // the manifest routes UNet output to MODEL_OUTPUT_STATE_KEY.
-        }
+        return executeRuntime(
+            plan,
+            runtime,
+            manifest,
+            state,
+            beforeDenoise = { step, pipeline ->
+                val sigma = sigmas[step]
+                pipeline.tensors[TIMESTEP_STATE_KEY] =
+                    floatArrayOf(DreamLiteScheduler.timestep(sigma, scheduler))
+            },
+            afterDenoise = { step, pipeline ->
+                executeScheduledStep(pipeline, sigmas[step], sigmas[step + 1])
+            },
+        )
     }
 
     fun executeScheduledStep(
@@ -124,6 +129,7 @@ object DreamLiteOrchestrator {
         manifest: DreamLiteAbi.Manifest,
         state: PipelineState,
         beforeDenoise: (Int, PipelineState) -> Unit = { _, _ -> },
+        afterDenoise: (Int, PipelineState) -> Unit = { _, _ -> },
     ): PipelineState =
         executeStateful(plan, state) { stage, step, pipeline ->
             when (stage) {
@@ -135,6 +141,7 @@ object DreamLiteOrchestrator {
                     val index = requireNotNull(step)
                     beforeDenoise(index, pipeline)
                     runComponent(runtime, manifest, "unet", pipeline)
+                    afterDenoise(index, pipeline)
                 }
                 Stage.VAE_DECODER ->
                     runComponent(runtime, manifest, "vae_decoder", pipeline)
