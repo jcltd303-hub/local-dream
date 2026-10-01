@@ -10,15 +10,15 @@ def t(name,key,shape=(1,)):
 def metadata():
     return {"components":{
       "unet":{"inputs":[t("sample","model_input",(1,4,128,256)),t("timestep","timestep"),
-        t("encoder_hidden_states","conditioning",(1,77,2048)),t("encoder_attention_mask","attention_mask",(1,77)),
+        t("encoder_hidden_states","conditioning",(1,512,2048)),t("encoder_attention_mask","attention_mask",(1,512)),
         t("time_ids","time_ids",(1,2))],"outputs":[t("noise_pred","model_output",(1,4,128,256))]},
       "vae_encoder":{"inputs":[t("image","reference_image",(1,3,1024,1024))],
                      "outputs":[t("latent","reference_latent",(1,4,128,128))]},
       "vae_decoder":{"inputs":[t("latent","latent",(1,4,128,128))],
                      "outputs":[t("image","image",(1,3,1024,1024))]},
-      "text_encoder":{"inputs":[t("tokens","tokens",(1,77))],
-                      "outputs":[t("hidden","conditioning",(1,77,2048)),
-                                 t("mask","attention_mask",(1,77))]},
+      "text_encoder":{"inputs":[t("tokens","tokens",(1,512))],
+                      "outputs":[t("hidden","conditioning",(1,512,2048)),
+                                 t("mask","attention_mask",(1,512))]},
     }}
 
 def config():
