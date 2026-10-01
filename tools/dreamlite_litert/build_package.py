@@ -6,7 +6,7 @@ FILES={"unet":"dreamlite_unet.tflite","vae_encoder":"dreamlite_vae_encoder.tflit
        "vae_decoder":"dreamlite_vae_decoder.tflite","text_encoder":"dreamlite_text_encoder.tflite"}
 def main():
  p=argparse.ArgumentParser();p.add_argument("--components",required=True);p.add_argument("--checkpoint-config",required=True)
- p.add_argument("--output",required=True);a=p.parse_args(); src=Path(a.components);out=Path(a.output);out.mkdir(parents=True,exist_ok=True)
+ p.add_argument("--output",required=True);p.add_argument("--multimodal-conditioning",action="store_true");a=p.parse_args(); src=Path(a.components);out=Path(a.output);out.mkdir(parents=True,exist_ok=True)
  for _,name in FILES.items():
   f=src/name
   if not f.is_file() or not f.stat().st_size: raise FileNotFoundError(f)
@@ -18,7 +18,8 @@ def main():
    "--checkpoint-config",a.checkpoint_config,"--output",str(out/"dreamlite_abi.json")],check=True)
  cfg={"runtime":"dreamlite_litert","default_steps":4,"dreamlite_unet":FILES["unet"],
       "dreamlite_vae_encoder":FILES["vae_encoder"],"dreamlite_vae_decoder":FILES["vae_decoder"],
-      "dreamlite_text_encoder":FILES["text_encoder"]}
+      "dreamlite_text_encoder":FILES["text_encoder"],
+      "dreamlite_multimodal_conditioning":bool(a.multimodal_conditioning)}
  (out/"config.json").write_text(json.dumps(cfg,indent=2)+"\n")
  print(out)
 if __name__=="__main__":main()
