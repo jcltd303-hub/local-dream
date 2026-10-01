@@ -141,8 +141,9 @@ data class Model(
         get() = ditKind == "klein" || ditKind == "qwen21"
 
     val supportsExternalIdentityAdapter: Boolean
-        get() = configDefaults.identityVisionEncoder != null &&
-            configDefaults.identityAdapter != null && !runOnCpu && !isDit
+        get() = configDefaults.identityAdapterType == "ip_adapter_sd15" &&
+            configDefaults.identityVisionEncoder != null &&
+            configDefaults.identityAdapter != null && !runOnCpu && !isDit && !isSdxl && !isAnima
 
     fun hasUsableExternalIdentityAdapter(context: Context): Boolean {
         if (!supportsExternalIdentityAdapter) return false
