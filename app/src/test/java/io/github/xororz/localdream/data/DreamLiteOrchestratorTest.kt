@@ -7,6 +7,14 @@ import org.junit.Test
 
 class DreamLiteOrchestratorTest {
     @Test
+    fun usesOfficialFourStepMobileSigmaSchedule() {
+        assertEquals(
+            listOf(1.0f, 0.75f, 0.5f, 0.25f),
+            DreamLiteOrchestrator.DEFAULT_SIGMAS,
+        )
+    }
+
+    @Test
     fun generationRunsExactlyFourDenoisePasses() {
         val plan = DreamLiteOrchestrator.plan(false)
         assertFalse(plan.hasReferenceImage)
