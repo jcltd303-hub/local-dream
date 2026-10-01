@@ -96,6 +96,8 @@ struct ServerOptions {
   // Kept independent from the diffusion pipeline until adapter tensor contracts
   // are verified for a packaged model.
   std::string identity_vision_path;
+  std::string identity_adapter_path;
+  float identity_adapter_scale = 0.8f;
   bool convert_clip_skip_2 = false;
 
   bool isSdxl() const { return type == ModelType::kSdxl || type == ModelType::kSdxlMnn; }
@@ -149,6 +151,8 @@ static void showHelp() {
          "resident; for 12GB devices\n"
          "  --clip_skip_2          (convert) export CLIP with skip 2\n"
          "  --identity_vision <f>  Optional QNN vision encoder .bin for /identity/embed\n"
+         "  --identity_adapter <f> Optional adapter graph (validated before generation wiring)\n"
+         "  --identity_scale <f>   Adapter strength, clamped to 0..2\n"
          "  --log_level <n>        QNN log level\n"
          "  --version              Print QNN SDK build id\n"
          "  --help                 Show this help\n";
@@ -181,6 +185,8 @@ static ServerOptions processCommandLine(int argc, char **argv) {
     OPT_LOWRAM,
     OPT_ANIMA_SEQ_DIT,
     OPT_IDENTITY_VISION,
+    OPT_IDENTITY_ADAPTER,
+    OPT_IDENTITY_SCALE,
     OPT_LOG_LEVEL
   };
   static struct pal::Option s_longOptions[] = {
@@ -202,6 +208,8 @@ static ServerOptions processCommandLine(int argc, char **argv) {
       {"lowram", pal::no_argument, NULL, OPT_LOWRAM},
       {"anima_seq_dit", pal::no_argument, NULL, OPT_ANIMA_SEQ_DIT},
       {"identity_vision", pal::required_argument, NULL, OPT_IDENTITY_VISION},
+      {"identity_adapter", pal::required_argument, NULL, OPT_IDENTITY_ADAPTER},
+      {"identity_scale", pal::required_argument, NULL, OPT_IDENTITY_SCALE},
       {"log_level", pal::required_argument, NULL, OPT_LOG_LEVEL},
       {NULL, 0, NULL, 0}};
 
@@ -268,6 +276,12 @@ static ServerOptions processCommandLine(int argc, char **argv) {
         break;
       case OPT_IDENTITY_VISION:
         opts.identity_vision_path = pal::g_optArg;
+        break;
+      case OPT_IDENTITY_ADAPTER:
+        opts.identity_adapter_path = pal::g_optArg;
+        break;
+      case OPT_IDENTITY_SCALE:
+        opts.identity_adapter_scale = std::clamp(std::stof(pal::g_optArg), 0.0f, 2.0f);
         break;
       case OPT_LOG_LEVEL:
         logLevel = sample_app::parseLogLevel(pal::g_optArg);
@@ -816,6 +830,7 @@ int main(int argc, char **argv) {
   std::unique_ptr<TextEncoder> text_encoder;
   std::unique_ptr<Pipeline> pipeline;
   std::unique_ptr<QnnModel> identity_vision;
+  std::unique_ptr<QnnModel> identity_adapter;
   MNN::Interpreter *safety_interpreter = nullptr;
   MNN::Session *safety_session = nullptr;
 
@@ -919,6 +934,17 @@ int main(int argc, char **argv) {
     identity_vision = qnn_runtime::createModel(opts.identity_vision_path, "identity_vision");
     if (!identity_vision || qnn_runtime::initializeApp("IdentityVision", identity_vision) != EXIT_SUCCESS)
       showHelpAndExit("Identity vision model initialization failed");
+  }
+
+  if (!opts.identity_adapter_path.empty()) {
+    if (!identity_vision)
+      showHelpAndExit("--identity_adapter requires --identity_vision");
+    if (!std::filesystem::exists(opts.identity_adapter_path))
+      showHelpAndExit("Identity adapter model not found: " + opts.identity_adapter_path);
+    identity_adapter = qnn_runtime::createModel(opts.identity_adapter_path, "identity_adapter");
+    if (!identity_adapter || qnn_runtime::initializeApp("IdentityAdapter", identity_adapter) != EXIT_SUCCESS)
+      showHelpAndExit("Identity adapter model initialization failed");
+    QNN_INFO("Identity adapter loaded; default scale %.3f", opts.identity_adapter_scale);
   }
 
   // --- HTTP Server ---
