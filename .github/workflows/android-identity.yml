@@ -44,13 +44,9 @@ jobs:
         run: ./gradlew compileBasicDebugKotlin
       - name: Unit tests
         run: ./gradlew testBasicDebugUnitTest
-      # Full APK packaging invokes CMake and requires Qualcomm QNN SDK.
-      # Generic hosted runners validate Kotlin/tests without proprietary SDK assets.
       - name: Build basic debug APK
-        if: env.QNN_SDK_ROOT != ''
         run: ./gradlew assembleBasicDebug
       - name: Upload APK
-        if: env.QNN_SDK_ROOT != ''
         uses: actions/upload-artifact@v4
         with:
           name: local-dream-identity-basic-debug
