@@ -14,7 +14,7 @@ class DreamLiteGenerationTest {
                 calls += component
                 return when (component) {
                     "unet" -> mapOf("noise" to FloatArray(inputs.getValue("sample").size))
-                    "vae_decoder" -> mapOf("image" to inputs.getValue("latent"))
+                    "vae_decoder" -> mapOf("image" to FloatArray(3 * 1024 * 1024))
                     else -> error("unexpected $component")
                 }
             }
@@ -51,6 +51,6 @@ class DreamLiteGenerationTest {
             runtime, manifest, DreamLiteGeneration.Request("portrait", 1024, 1024, 7), conditioner
         )
         assertEquals(listOf("unet","unet","unet","unet","vae_decoder"), calls)
-        assertEquals(4 * 128 * 128, image.size)
+        assertEquals(3 * 1024 * 1024, image.size)
     }
 }
