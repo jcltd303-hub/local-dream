@@ -298,7 +298,7 @@ class DreamLiteOrchestratorTest {
                 "text_encoder" to DreamLiteAbi.Component(emptyList(), emptyList()),
                 "unet" to DreamLiteAbi.Component(
                     listOf(
-                        DreamLiteAbi.Tensor("latent", "float32", listOf(1), "latent"),
+                        DreamLiteAbi.Tensor("latent", "float32", listOf(1), "model_input"),
                         DreamLiteAbi.Tensor("timestep", "float32", listOf(1), "timestep"),
                         DreamLiteAbi.Tensor("conditioning", "float32", listOf(1), "conditioning"),
                         DreamLiteAbi.Tensor("mask", "float32", listOf(1), "attention_mask"),
