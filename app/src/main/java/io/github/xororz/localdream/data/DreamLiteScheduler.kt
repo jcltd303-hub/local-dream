@@ -38,7 +38,7 @@ object DreamLiteScheduler {
     }
 
     fun schedule(imageSeqLen: Int, config: Config): List<Float> {
-        val mu = calculateMu(imageSeqLen, config)
+        val mu = if (config.useDynamicShifting) calculateMu(imageSeqLen, config) else 0f
         return DreamLiteOrchestrator.DEFAULT_SIGMAS.map { shiftedSigma(it, mu, config) } + 0f
     }
 
