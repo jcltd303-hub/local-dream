@@ -21,7 +21,7 @@
 extern "C" {
 #endif
 
-#define DIT_ENGINE_ABI_VERSION 5
+#define DIT_ENGINE_ABI_VERSION 6
 
 // Name of the single symbol the core resolves after dlopen.
 #define DIT_ENGINE_ENTRY_SYMBOL "dit_engine_get_api"
@@ -101,6 +101,20 @@ typedef void (*dit_preview_cb)(int step, const uint8_t *rgb, int width,
 typedef void (*dit_log_cb)(int level, const char *text, void *user_data);
 
 typedef struct {
+  const char *prompt;
+  const uint8_t *reference_image_rgb;
+  int reference_width;
+  int reference_height;
+} dit_condition_params;
+
+typedef struct {
+  float *hidden_states;
+  float *attention_mask;
+  int sequence_length;
+  int hidden_size;
+} dit_condition_output;
+
+typedef struct {
   int abi_version;
 
   // Returns NULL on failure; the reason is available from last_error(NULL).
@@ -115,6 +129,12 @@ typedef struct {
                    void *user_data, uint8_t **out_pixels, int *out_width,
                    int *out_height, int *out_channels);
   void (*free_image)(uint8_t *pixels);
+
+  // Standalone multimodal conditioning for runtimes such as DreamLite that
+  // reuse the engine's Qwen-family LLM/VLM but own their diffusion loop.
+  bool (*condition)(dit_ctx *ctx, const dit_condition_params *params,
+                    dit_condition_output *out);
+  void (*free_condition)(dit_condition_output *out);
 
   // Last failure on this context, or the last create() failure when ctx is
   // NULL. Valid until the next call on the same context.
