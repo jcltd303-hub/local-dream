@@ -1,6 +1,7 @@
 package io.github.xororz.localdream.data
 
 import android.content.Context
+import android.os.Build
 import java.io.File
 
 /**
@@ -10,6 +11,23 @@ import java.io.File
  */
 object DreamLiteLiteRt {
     const val RUNTIME = "dreamlite_litert"
+
+    /**
+     * The experimental Qualcomm NPU path is intentionally narrower than the
+     * generic LiteRT device matrix. SM8650 is Snapdragon 8 Gen 3 (Galaxy S24
+     * Ultra target); newer SM parts are admitted for forward testing.
+     */
+    private const val FIRST_QUALCOMM_NPU_PART = 8650
+
+    fun isSupportedNpuDevice(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false
+        val soc = Build.SOC_MODEL.uppercase()
+        if (!soc.startsWith("SM")) return false
+        val part = soc.dropWhile { !it.isDigit() }
+            .takeWhile { it.isDigit() }
+            .toIntOrNull()
+        return part != null && part >= FIRST_QUALCOMM_NPU_PART
+    }
 
     data class Package(
         val unet: File,
