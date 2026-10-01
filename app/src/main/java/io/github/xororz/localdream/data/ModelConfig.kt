@@ -40,6 +40,8 @@ data class ModelConfig(
     val dreamliteVaeEncoder: String? = null,
     val dreamliteVaeDecoder: String? = null,
     val dreamliteTextEncoder: String? = null,
+    val dreamliteConditioningLlm: String? = null,
+    val dreamliteConditioningVision: String? = null,
     val dreamliteMultimodalConditioning: Boolean? = null,
 ) {
     /** Field-by-field merge: values from this win, [other] fills the nulls. */
@@ -59,6 +61,8 @@ data class ModelConfig(
         dreamliteVaeEncoder = dreamliteVaeEncoder ?: other.dreamliteVaeEncoder,
         dreamliteVaeDecoder = dreamliteVaeDecoder ?: other.dreamliteVaeDecoder,
         dreamliteTextEncoder = dreamliteTextEncoder ?: other.dreamliteTextEncoder,
+        dreamliteConditioningLlm = dreamliteConditioningLlm ?: other.dreamliteConditioningLlm,
+        dreamliteConditioningVision = dreamliteConditioningVision ?: other.dreamliteConditioningVision,
         dreamliteMultimodalConditioning = dreamliteMultimodalConditioning ?: other.dreamliteMultimodalConditioning,
     )
 
@@ -113,6 +117,8 @@ data class ModelConfig(
                     dreamliteVaeEncoder = json.optStringOrNull("dreamlite_vae_encoder"),
                     dreamliteVaeDecoder = json.optStringOrNull("dreamlite_vae_decoder"),
                     dreamliteTextEncoder = json.optStringOrNull("dreamlite_text_encoder"),
+                    dreamliteConditioningLlm = json.optStringOrNull("dreamlite_conditioning_llm"),
+                    dreamliteConditioningVision = json.optStringOrNull("dreamlite_conditioning_vision"),
                     dreamliteMultimodalConditioning =
                         if (json.has("dreamlite_multimodal_conditioning"))
                             json.optBoolean("dreamlite_multimodal_conditioning")
