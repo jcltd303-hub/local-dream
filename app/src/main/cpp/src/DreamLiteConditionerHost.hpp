@@ -47,8 +47,7 @@ class DreamLiteConditionerHost {
   }
 
   bool encode(const std::string &prompt, const uint8_t *rgb, int width,
-              int height, int drop_prefix_tokens,
-              std::vector<float> &hidden_states,
+              int height, std::vector<float> &hidden_states,
               std::vector<float> &attention_mask, int &sequence_length,
               int &hidden_size) {
     if (!ctx_ || !api_) {
@@ -60,7 +59,7 @@ class DreamLiteConditionerHost {
     params.reference_image_rgb = rgb;
     params.reference_width = width;
     params.reference_height = height;
-    params.drop_prefix_tokens = drop_prefix_tokens;
+    params.reserved_drop_prefix_tokens = 0;
 
     dit_condition_output out{};
     if (!api_->condition_standalone(ctx_, &params, &out)) {
