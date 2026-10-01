@@ -249,7 +249,10 @@ fun ModelRunScreen(
     }
     val supportsReferenceEditing = model?.supportsNativeReferenceEditing == true
     val supportsIdentityReference = model?.supportsIdentityReference == true
-    val identityAdapterScale = model?.configDefaults?.identityAdapterScale ?: 0.8f
+    val externalIdentityReady = model?.hasUsableExternalIdentityAdapter(context) == true
+    var identityAdapterScale by remember(modelId) {
+        mutableFloatStateOf(model?.configDefaults?.identityAdapterScale ?: 0.8f)
+    }
     LaunchedEffect(Unit) {
         if (!isRemote) {
             modelRepository.ensureLoaded()
