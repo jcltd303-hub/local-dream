@@ -145,6 +145,8 @@ class BackgroundGenerationService : Service() {
             return START_NOT_STICKY
         }
 
+        val modelId = intent.getStringExtra("model_id")
+        val backendType = intent.getStringExtra("backend_type")
         val negativePrompt = intent.getStringExtra("negative_prompt") ?: ""
         val steps = intent.getIntExtra("steps", 28)
         val cfg = intent.getFloatExtra("cfg", 7f)
@@ -236,27 +238,38 @@ class BackgroundGenerationService : Service() {
 
         serviceScope.launch {
             Log.d("GenerationService", "start generation")
-            runGeneration(
-                prompt,
-                negativePrompt,
-                steps,
-                cfg,
-                seed,
-                width,
-                height,
-                effectiveWidth,
-                effectiveHeight,
-                image,
-                mask,
-                referenceImages,
-                denoiseStrength,
-                useOpenCL,
-                scheduler,
-                aspectRatio,
-                ultrafix,
-                ultrafixTileSize,
-                backendHost,
-            )
+            if (backendType == DreamLiteLiteRt.RUNTIME && backendHost == LOCAL_BACKEND_HOST) {
+                runDreamLiteGeneration(
+                    modelId = requireNotNull(modelId) { "DreamLite generation requires model_id" },
+                    prompt = prompt,
+                    seed = seed,
+                    width = width,
+                    height = height,
+                    referenceImages = referenceImages,
+                )
+            } else {
+                runGeneration(
+                    prompt,
+                    negativePrompt,
+                    steps,
+                    cfg,
+                    seed,
+                    width,
+                    height,
+                    effectiveWidth,
+                    effectiveHeight,
+                    image,
+                    mask,
+                    referenceImages,
+                    denoiseStrength,
+                    useOpenCL,
+                    scheduler,
+                    aspectRatio,
+                    ultrafix,
+                    ultrafixTileSize,
+                    backendHost,
+                )
+            }
         }
 
         return START_NOT_STICKY
