@@ -30,6 +30,7 @@ def test_emit():
         out=json.loads(o.read_text())
         assert out["runtime"]=="dreamlite_litert"
         assert out["steps"]==4
+        assert out["conditioning_backend"]=="litert_text"
         assert out["vae"]=={"scaling_factor":0.5,"shift_factor":0.1}
         assert out["components"]["unet"]["inputs"][0]["state_key"]=="model_input"
 
@@ -48,6 +49,18 @@ def test_emit_native_qwen_without_text_encoder():
         m.write_text(json.dumps(meta)); c.write_text(json.dumps(config()))
         subprocess.run([sys.executable,str(SCRIPT),"--metadata",str(m),"--checkpoint-config",str(c),
                         "--conditioning-backend","qwen3_vl_gguf","--output",str(o)],check=True)
+        out=json.loads(o.read_text())
+        assert out["conditioning_backend"]=="qwen3_vl_gguf"
+        assert "text_encoder" not in out["components"]
+
+
+def test_emit_qwen_backend_does_not_require_text_component():
+    with tempfile.TemporaryDirectory() as d:
+        d=Path(d);m=d/"m.json";c=d/"c.json";o=d/"dreamlite_abi.json"
+        meta=metadata();del meta["components"]["text_encoder"]
+        m.write_text(json.dumps(meta));c.write_text(json.dumps(config()))
+        subprocess.run([sys.executable,str(SCRIPT),"--metadata",str(m),"--checkpoint-config",str(c),
+            "--conditioning-backend","qwen3_vl_gguf","--output",str(o)],check=True)
         out=json.loads(o.read_text())
         assert out["conditioning_backend"]=="qwen3_vl_gguf"
         assert "text_encoder" not in out["components"]
