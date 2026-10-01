@@ -33,9 +33,15 @@ object DreamLiteAbi {
         val outputs: List<Tensor>,
     )
 
+    data class Vae(
+        val scalingFactor: Float,
+        val shiftFactor: Float,
+    )
+
     data class Manifest(
         val components: Map<String, Component>,
         val scheduler: DreamLiteScheduler.Config? = null,
+        val vae: Vae? = null,
     )
 
     sealed interface ParseResult {
@@ -79,6 +85,15 @@ object DreamLiteAbi {
         ) {
             return ParseResult.Invalid("DreamLite ABI scheduler is invalid")
         }
+
+        val vaeJson = root.optJSONObject("vae")
+            ?: return ParseResult.Invalid("DreamLite ABI VAE config is missing")
+        val scalingFactor = vaeJson.optDouble("scaling_factor", Double.NaN)
+        val shiftFactor = vaeJson.optDouble("shift_factor", 0.0)
+        if (!scalingFactor.isFinite() || scalingFactor <= 0.0 || !shiftFactor.isFinite()) {
+            return ParseResult.Invalid("DreamLite ABI VAE config is invalid")
+        }
+        val vae = Vae(scalingFactor.toFloat(), shiftFactor.toFloat())
 
         val componentsJson = root.optJSONObject("components")
             ?: return ParseResult.Invalid("DreamLite ABI components are missing")
@@ -146,6 +161,6 @@ object DreamLiteAbi {
             return ParseResult.Invalid("DreamLite ABI VAE decoder must consume latent state")
         }
 
-        return ParseResult.Valid(Manifest(parsed, scheduler))
+        return ParseResult.Valid(Manifest(parsed, scheduler, vae))
     }
 }
