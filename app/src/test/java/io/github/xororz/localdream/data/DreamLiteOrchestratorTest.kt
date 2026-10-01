@@ -19,6 +19,20 @@ class DreamLiteOrchestratorTest {
     }
 
     @Test
+    fun executorReceivesStableDenoiseStepIndices() {
+        val calls = mutableListOf<Pair<DreamLiteOrchestrator.Stage, Int?>>()
+        DreamLiteOrchestrator.execute(
+            DreamLiteOrchestrator.plan(false),
+            DreamLiteOrchestrator.StageExecutor { stage, step ->
+                calls += stage to step
+            },
+        )
+        assertEquals(listOf(0, 1, 2, 3), calls.mapNotNull { it.second })
+        assertEquals(null, calls.first().second)
+        assertEquals(null, calls.last().second)
+    }
+
+    @Test
     fun editEncodesReferenceBeforeDenoising() {
         val plan = DreamLiteOrchestrator.plan(true)
         assertTrue(plan.hasReferenceImage)
