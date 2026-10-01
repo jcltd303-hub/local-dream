@@ -13,6 +13,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import io.github.xororz.localdream.BuildConfig
 import io.github.xororz.localdream.R
+import io.github.xororz.localdream.data.AutonomousAssetPlan
 import io.github.xororz.localdream.data.DitResolution
 import io.github.xororz.localdream.data.Model
 import io.github.xororz.localdream.data.ModelRepository
@@ -275,6 +276,73 @@ class RemoteHostService : Service() {
                 Log.e(TAG, "failed to stop backend for remote stop", e)
             }
             return JSONObject().put("ok", true)
+        }
+        override fun assetsStart(body: JSONObject): RemoteHostServer.Response {
+            val plan = try {
+                AutonomousAssetPlan.parse(body)
+            } catch (e: Exception) {
+                return RemoteHostServer.Response(
+                    400,
+                    JSONObject().put("error", e.message ?: "invalid autonomous asset plan"),
+                )
+            }
+
+            return try {
+                AutonomousAssetService.start(applicationContext, plan)
+                RemoteHostServer.Response(
+                    200,
+                    JSONObject()
+                        .put("ok", true)
+                        .put("run_id", plan.runId)
+                        .put("jobs", plan.jobs.size),
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "failed to start autonomous asset run", e)
+                RemoteHostServer.Response(
+                    500,
+                    JSONObject().put("error", "autonomous asset start rejected"),
+                )
+            }
+        }
+
+        override fun assetsStatus(): JSONObject =
+            AutonomousAssetService.status(applicationContext)
+
+        override fun assetsResume(): RemoteHostServer.Response {
+            val status = AutonomousAssetService.status(applicationContext)
+            if (status.optString("state") == "idle") {
+                return RemoteHostServer.Response(
+                    404,
+                    JSONObject().put("error", "no autonomous asset run to resume"),
+                )
+            }
+            return try {
+                AutonomousAssetService.resume(applicationContext)
+                RemoteHostServer.Response(
+                    200,
+                    JSONObject()
+                        .put("ok", true)
+                        .put("run_id", status.optString("run_id")),
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "failed to resume autonomous asset run", e)
+                RemoteHostServer.Response(
+                    500,
+                    JSONObject().put("error", "autonomous asset resume rejected"),
+                )
+            }
+        }
+
+        override fun assetsStop(): JSONObject {
+            return try {
+                AutonomousAssetService.stop(applicationContext)
+                JSONObject().put("ok", true)
+            } catch (e: Exception) {
+                Log.e(TAG, "failed to stop autonomous asset run", e)
+                JSONObject()
+                    .put("ok", false)
+                    .put("error", "autonomous asset stop rejected")
+            }
         }
     }
 
