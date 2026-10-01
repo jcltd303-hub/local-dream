@@ -340,7 +340,7 @@ class QnnModel : public QnnSampleApp {
         QNN_ERROR("Unknown IP-Adapter UNet input: %s", name.c_str());
         return StatusCode::FAILURE;
       }
-      if (m_ioTensor.copyFromFloatToNative(source, &input) !=
+      if (m_ioTensor.copyFromFloatToNative(const_cast<float *>(source), &input) !=
           qnn::tools::iotensor::StatusCode::SUCCESS)
         return StatusCode::FAILURE;
     }
@@ -375,7 +375,7 @@ class QnnModel : public QnnSampleApp {
                 expected, input_elems);
       return StatusCode::FAILURE;
     }
-    if (m_ioTensor.copyFromFloatToNative(input, &inputs[0]) !=
+    if (m_ioTensor.copyFromFloatToNative(const_cast<float *>(input), &inputs[0]) !=
         qnn::tools::iotensor::StatusCode::SUCCESS)
       return StatusCode::FAILURE;
     if (!runGraph(graphInfo, "identity vision encoder"))
