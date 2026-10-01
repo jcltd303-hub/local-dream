@@ -48,6 +48,13 @@ class AutonomousAssetService : Service() {
         private const val CHANNEL_ID = "autonomous_asset_generation"
         private const val NOTIFICATION_ID = 47
 
+        private object StateHolder {
+            @Volatile
+            var running = false
+        }
+
+        fun isRunning(): Boolean = StateHolder.running
+
         fun start(context: Context, plan: AutonomousAssetPlan) {
             val intent = Intent(context, AutonomousAssetService::class.java)
                 .setAction(ACTION_START)
@@ -87,8 +94,16 @@ class AutonomousAssetService : Service() {
                     root,
                     "LocalDreamAutonomous/${sanitize(runId)}",
                 )
+                val done = raw.optBoolean("done", false)
+                val terminalCount = completed.length() + failed.length()
+                val state = when {
+                    done -> "complete"
+                    StateHolder.running -> "running"
+                    failed.length() > 0 && terminalCount >= jobs.length() -> "partial"
+                    else -> "paused"
+                }
                 JSONObject().apply {
-                    put("state", if (raw.optBoolean("done", false)) "complete" else "running")
+                    put("state", state)
                     put("run_id", runId)
                     put("model_id", plan.optString("model_id"))
                     put("active", raw.opt("active") ?: JSONObject.NULL)
@@ -132,6 +147,7 @@ class AutonomousAssetService : Service() {
         when (intent?.action) {
             ACTION_STOP -> {
                 stopRequested = true
+                StateHolder.running = false
                 BackgroundGenerationService.stop(applicationContext)
                 stopSelf()
                 return START_NOT_STICKY
@@ -140,18 +156,22 @@ class AutonomousAssetService : Service() {
                 val raw = intent.getStringExtra(EXTRA_PLAN_JSON)
                 if (raw.isNullOrBlank()) {
                     Log.e("AutonomousAssets", "Missing plan_json")
+                    StateHolder.running = false
                     stopSelf()
                     return START_NOT_STICKY
                 }
                 stopRequested = false
+                StateHolder.running = true
                 scope.launch { execute(AutonomousAssetPlan.parse(raw), reset = true) }
             }
             ACTION_RESUME, null -> {
                 stopRequested = false
+                StateHolder.running = true
                 scope.launch {
                     val state = latestStateFile()
                     if (state == null) {
                         Log.i("AutonomousAssets", "No autonomous run to resume")
+                        StateHolder.running = false
                         stopSelf()
                     } else {
                         val json = JSONObject(state.readText())
@@ -376,6 +396,7 @@ class AutonomousAssetService : Service() {
     }
 
     override fun onDestroy() {
+        StateHolder.running = false
         scope.cancel()
         super.onDestroy()
     }
