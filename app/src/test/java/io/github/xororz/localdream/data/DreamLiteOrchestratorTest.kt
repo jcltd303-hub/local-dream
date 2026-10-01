@@ -207,6 +207,8 @@ class DreamLiteOrchestratorTest {
             state,
             beforeDenoise = { step, pipeline ->
                 val sigma = sigmas[step]
+                pipeline.tensors[DreamLiteOrchestrator.MODEL_INPUT_STATE_KEY] =
+                    pipeline.tensors.getValue(DreamLiteOrchestrator.LATENT_STATE_KEY)
                 pipeline.tensors[DreamLiteOrchestrator.TIMESTEP_STATE_KEY] =
                     floatArrayOf(DreamLiteScheduler.timestep(sigma, manifest.scheduler!!))
             },
