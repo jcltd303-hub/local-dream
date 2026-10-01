@@ -22,7 +22,7 @@ def test_package_builder(tmp_path):
 
 def test_package_builder_marks_multimodal(tmp_path):
  c=tmp_path/"components";c.mkdir();m=contract()
- names={"unet":"dreamlite_unet.tflite","vae_encoder":"dreamlite_vae_encoder.tflite","vae_decoder":"dreamlite_vae_decoder.tflite","text_encoder":"dreamlite_text_encoder.tflite"}
+ names={"unet":"dreamlite_unet.tflite","vae_encoder":"dreamlite_vae_encoder.tflite","vae_decoder":"dreamlite_vae_decoder.tflite"}
  for key,fn in names.items():
   (c/fn).write_bytes(b"x");(c/f"{key}.json").write_text(json.dumps(m["components"][key]))
  cp=tmp_path/"checkpoint.json";cp.write_text(json.dumps(config()));out=tmp_path/"package"
@@ -30,6 +30,11 @@ def test_package_builder_marks_multimodal(tmp_path):
  subprocess.run([sys.executable,str(Path(__file__).with_name("build_package.py")),"--components",str(c),"--checkpoint-config",str(cp),"--output",str(out),"--multimodal-conditioning","--conditioning-llm",str(llm),"--conditioning-vision",str(vision)],check=True)
  cfg=json.loads((out/"config.json").read_text())
  assert cfg["dreamlite_multimodal_conditioning"] is True
+ assert "dreamlite_text_encoder" not in cfg
+ assert not (out/"dreamlite_text_encoder.tflite").exists()
+ abi=json.loads((out/"dreamlite_abi.json").read_text())
+ assert abi["conditioning_backend"]=="qwen3_vl_gguf"
+ assert "text_encoder" not in abi["components"]
  assert cfg["dreamlite_conditioning_llm"]=="dreamlite_conditioning_llm.gguf"
  assert cfg["dreamlite_conditioning_vision"]=="dreamlite_conditioning_vision.gguf"
  assert (out/cfg["dreamlite_conditioning_llm"]).read_bytes()==b"llm"
@@ -37,7 +42,7 @@ def test_package_builder_marks_multimodal(tmp_path):
 
 def test_multimodal_package_requires_qwen_assets(tmp_path):
  c=tmp_path/"components";c.mkdir();m=contract()
- names={"unet":"dreamlite_unet.tflite","vae_encoder":"dreamlite_vae_encoder.tflite","vae_decoder":"dreamlite_vae_decoder.tflite","text_encoder":"dreamlite_text_encoder.tflite"}
+ names={"unet":"dreamlite_unet.tflite","vae_encoder":"dreamlite_vae_encoder.tflite","vae_decoder":"dreamlite_vae_decoder.tflite"}
  for key,fn in names.items():
   (c/fn).write_bytes(b"x");(c/f"{key}.json").write_text(json.dumps(m["components"][key]))
  cp=tmp_path/"checkpoint.json";cp.write_text(json.dumps(config()));out=tmp_path/"package"
