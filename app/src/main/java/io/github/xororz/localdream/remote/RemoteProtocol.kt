@@ -25,6 +25,10 @@ object RemoteProtocol {
     const val PATH_SELECT = "/select"
     const val PATH_STATUS = "/status"
     const val PATH_STOP = "/stop"
+    const val PATH_ASSETS_START = "/assets/start"
+    const val PATH_ASSETS_STATUS = "/assets/status"
+    const val PATH_ASSETS_RESUME = "/assets/resume"
+    const val PATH_ASSETS_STOP = "/assets/stop"
 
     // Pseudo model id accepted by /select: starts the host's native backend
     // in --upscaler_mode (standalone upscaling, no diffusion model).
