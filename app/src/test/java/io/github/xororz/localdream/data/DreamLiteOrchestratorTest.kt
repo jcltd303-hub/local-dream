@@ -153,6 +153,62 @@ class DreamLiteOrchestratorTest {
     }
 
     @Test
+    fun scheduledRuntimeInjectsTimestepsAndUpdatesLatentFourTimes() {
+        val seenTimesteps = mutableListOf<Float>()
+        val runtime = object : DreamLiteRuntime {
+            override fun inspect() = DreamLiteRuntime.Diagnostics("test", "npu", emptyList(), false)
+            override fun runFloatComponent(
+                component: String,
+                inputs: Map<String, FloatArray>,
+            ): Map<String, FloatArray> = when (component) {
+                "text_encoder" -> mapOf("conditioning_out" to floatArrayOf(1f))
+                "unet" -> {
+                    seenTimesteps += inputs.getValue("timestep")[0]
+                    mapOf("noise" to floatArrayOf(1f))
+                }
+                "vae_decoder" -> mapOf("image_out" to inputs.getValue("latent"))
+                else -> error("unexpected component")
+            }
+        }
+        val manifest = DreamLiteAbi.Manifest(
+            components = mapOf(
+                "text_encoder" to DreamLiteAbi.Component(
+                    listOf(DreamLiteAbi.Tensor("prompt", "float32", listOf(1), "prompt")),
+                    listOf(DreamLiteAbi.Tensor("conditioning_out", "float32", listOf(1), "conditioning")),
+                ),
+                "unet" to DreamLiteAbi.Component(
+                    listOf(
+                        DreamLiteAbi.Tensor("latent", "float32", listOf(1), "latent"),
+                        DreamLiteAbi.Tensor("timestep", "float32", listOf(1), "timestep"),
+                    ),
+                    listOf(DreamLiteAbi.Tensor("noise", "float32", listOf(1), "model_output")),
+                ),
+                "vae_decoder" to DreamLiteAbi.Component(
+                    listOf(DreamLiteAbi.Tensor("latent", "float32", listOf(1), "latent")),
+                    listOf(DreamLiteAbi.Tensor("image_out", "float32", listOf(1), "image")),
+                ),
+            ),
+            scheduler = DreamLiteScheduler.Config(
+                numTrainTimesteps = 1000,
+                useDynamicShifting = false,
+                timeShiftType = "exponential",
+            ),
+        )
+        val state = DreamLiteOrchestrator.PipelineState(
+            linkedMapOf("prompt" to floatArrayOf(1f), "latent" to floatArrayOf(10f))
+        )
+        DreamLiteOrchestrator.executeScheduledRuntime(
+            DreamLiteOrchestrator.plan(false),
+            runtime,
+            manifest,
+            state,
+            imageSeqLen = 256,
+        )
+        assertEquals(listOf(1000f, 750f, 500f, 250f), seenTimesteps)
+        assertEquals(9f, state.tensors.getValue("image")[0], 1e-6f)
+    }
+
+    @Test
     fun editEncodesReferenceBeforeDenoising() {
         val plan = DreamLiteOrchestrator.plan(true)
         assertTrue(plan.hasReferenceImage)
