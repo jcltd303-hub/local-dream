@@ -46,6 +46,14 @@ object DreamLiteRuntimeFactory {
     const val REQUIRED_ACCELERATOR = "npu"
     const val CACHE_DIR = "dreamlite_litert_cache"
 
+    // Required at runtime for the Qualcomm LiteRT path. QNN core libraries are
+    // already packaged by the app; the LiteRT dispatch/compiler libraries are
+    // supplied by a LiteRT Qualcomm runtime bundle during QNN-enabled builds.
+    val requiredQnnLibraries = listOf("libQnnHtp.so", "libQnnSystem.so")
+
+    fun missingQnnLibraries(runtimeDir: File): List<String> =
+        requiredQnnLibraries.filterNot { File(runtimeDir, it).isFile }
+
     sealed interface Result {
         data class Available(val runtime: DreamLiteRuntime) : Result
         data class Unavailable(val reason: String) : Result
