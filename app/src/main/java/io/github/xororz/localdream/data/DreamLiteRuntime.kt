@@ -1,0 +1,60 @@
+package io.github.xororz.localdream.data
+
+import java.io.Closeable
+import java.io.File
+
+/**
+ * Execution boundary for the experimental DreamLite Android backend.
+ *
+ * Keeping this API free of LiteRT classes lets package/config tests run without
+ * loading native accelerator libraries. The concrete LiteRT implementation can
+ * be swapped as the converted graph ABI and Qualcomm delegate support mature.
+ */
+interface DreamLiteRuntime : Closeable {
+    data class Tensor(
+        val name: String,
+        val shape: List<Int>,
+        val dataType: String,
+    )
+
+    data class ComponentInfo(
+        val file: File,
+        val inputs: List<Tensor>,
+        val outputs: List<Tensor>,
+    )
+
+    data class Diagnostics(
+        val runtime: String,
+        val accelerator: String,
+        val components: List<ComponentInfo>,
+        val cpuFallback: Boolean,
+    )
+
+    fun inspect(): Diagnostics
+
+    override fun close() = Unit
+}
+
+/**
+ * Placeholder factory deliberately fails closed until the LiteRT CompiledModel
+ * dependency and converted DreamLite ABI are both pinned. No request may fall
+ * back into the QNN Stable Diffusion executable.
+ */
+object DreamLiteRuntimeFactory {
+    sealed interface Result {
+        data class Available(val runtime: DreamLiteRuntime) : Result
+        data class Unavailable(val reason: String) : Result
+    }
+
+    fun create(modelPackage: DreamLiteLiteRt.Package): Result {
+        // Touch the package here so callers cannot accidentally treat a runtime
+        // as independent of the exact files validated by DreamLiteLiteRt.probe.
+        val files = modelPackage.files
+        if (files.size != 4 || files.any { !it.isFile || it.length() <= 0L }) {
+            return Result.Unavailable("DreamLite LiteRT package is no longer valid")
+        }
+        return Result.Unavailable(
+            "LiteRT runner not linked yet; refusing CPU/QNN fallback",
+        )
+    }
+}
