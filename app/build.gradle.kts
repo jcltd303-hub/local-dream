@@ -45,6 +45,15 @@ android {
             //noinspection ChromeOsAbiSupport
             abiFilters += "arm64-v8a"
         }
+        externalNativeBuild {
+            cmake {
+                arguments += listOf(
+                    "-DQNN_SDK_ROOT=" + (System.getenv("QNN_SDK_ROOT") ?: ""),
+                    "-DCMAKE_POLICY_VERSION_MINIMUM=3.10",
+                )
+                targets += "libstable_diffusion_core.so"
+            }
+        }
     }
 
     signingConfigs {
@@ -104,6 +113,11 @@ android {
         create("filter") {
             dimension = "version"
             versionNameSuffix = "_with_filter"
+        }
+    }
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
         }
     }
 }
