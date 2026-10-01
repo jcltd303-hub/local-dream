@@ -72,6 +72,29 @@ object DreamLiteOrchestrator {
         }
     }
 
+    fun executeRuntime(
+        plan: Plan,
+        runtime: DreamLiteRuntime,
+        manifest: DreamLiteAbi.Manifest,
+        state: PipelineState,
+        beforeDenoise: (Int, PipelineState) -> Unit = { _, _ -> },
+    ): PipelineState =
+        executeStateful(plan, state) { stage, step, pipeline ->
+            when (stage) {
+                Stage.TEXT_ENCODER ->
+                    runComponent(runtime, manifest, "text_encoder", pipeline)
+                Stage.REFERENCE_ENCODER ->
+                    runComponent(runtime, manifest, "vae_encoder", pipeline)
+                Stage.UNET -> {
+                    val index = requireNotNull(step)
+                    beforeDenoise(index, pipeline)
+                    runComponent(runtime, manifest, "unet", pipeline)
+                }
+                Stage.VAE_DECODER ->
+                    runComponent(runtime, manifest, "vae_decoder", pipeline)
+            }
+        }
+
     fun executeStateful(
         plan: Plan,
         state: PipelineState,
