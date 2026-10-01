@@ -134,6 +134,19 @@ data class Model(
 ) {
     val isDit: Boolean get() = ditKind.isNotEmpty()
 
+    // Native multimodal DiTs consume clean reference images directly. Modular
+    // SD models expose identity reference only when their package declares both
+    // a vision encoder and an adapter graph in config.json.
+    val supportsNativeReferenceEditing: Boolean
+        get() = ditKind == "klein" || ditKind == "qwen21"
+
+    val supportsExternalIdentityAdapter: Boolean
+        get() = configDefaults.identityVisionEncoder != null &&
+            configDefaults.identityAdapter != null && !runOnCpu
+
+    val supportsIdentityReference: Boolean
+        get() = supportsNativeReferenceEditing || supportsExternalIdentityAdapter
+
     // Per-field priority: code defaults > config.json > global defaults.
     val defaults: GenerationDefaults
         get() = codeDefaults.withFallback(configDefaults).resolve()
