@@ -171,6 +171,14 @@ object DreamLiteOrchestrator {
         )
     }
 
+    fun prepareLatentForDecode(state: PipelineState, vae: DreamLiteAbi.Vae) {
+        val latent = state.tensors[LATENT_STATE_KEY]
+            ?: error("DreamLite pipeline tensor latent is unavailable")
+        state.tensors[LATENT_STATE_KEY] = FloatArray(latent.size) { index ->
+            latent[index] / vae.scalingFactor + vae.shiftFactor
+        }
+    }
+
     fun executeScheduledStep(
         state: PipelineState,
         sigma: Float,
@@ -204,8 +212,10 @@ object DreamLiteOrchestrator {
                     runComponent(runtime, manifest, "unet", pipeline)
                     afterDenoise(index, pipeline)
                 }
-                Stage.VAE_DECODER ->
+                Stage.VAE_DECODER -> {
+                    manifest.vae?.let { prepareLatentForDecode(pipeline, it) }
                     runComponent(runtime, manifest, "vae_decoder", pipeline)
+                }
             }
         }
 
