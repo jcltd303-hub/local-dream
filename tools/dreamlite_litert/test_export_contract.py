@@ -6,7 +6,7 @@ def test_official_contract_validates():
     validate(m)
     u=m["components"]["unet"]
     assert u["inputs"][0]["shape"] == [1,4,128,256]
-    assert u["inputs"][2]["shape"] == [1,-1,2048]
+    assert u["inputs"][2]["shape"] == [1,512,2048]
     assert u["inputs"][4]["shape"] == [1,2]
 
 def test_latent_width_doubles_only_unet_spatial_input():
