@@ -20,8 +20,9 @@ object DreamLiteGeneration {
         request: Request,
         conditioner: DreamLiteConditioner? = null,
     ): FloatArray {
-        require(request.width > 0 && request.height > 0)
-        require(request.width % 8 == 0 && request.height % 8 == 0)
+        require(request.width == 1024 && request.height == 1024) {
+            "DreamLite Mobile v1 is frozen to the official 1024x1024 graph contract"
+        }
         val shape = DreamLiteOrchestrator.LatentShape(
             height = request.height / 8,
             width = request.width / 8,
