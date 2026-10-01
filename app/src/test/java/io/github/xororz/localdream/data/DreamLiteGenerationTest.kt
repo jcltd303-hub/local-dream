@@ -25,10 +25,19 @@ class DreamLiteGenerationTest {
             components = mapOf(
                 "text_encoder" to DreamLiteAbi.Component(listOf(t("tokens","tokens")), listOf(t("c","conditioning"))),
                 "unet" to DreamLiteAbi.Component(
-                    listOf(t("sample","model_input"),t("time","timestep"),t("cond","conditioning"),t("mask","attention_mask"),t("ids","time_ids")),
-                    listOf(t("noise","model_output")),
+                    listOf(
+                        DreamLiteAbi.Tensor("sample","float32",listOf(1,4,128,256),"model_input"),
+                        t("time","timestep"),
+                        DreamLiteAbi.Tensor("cond","float32",listOf(1,-1,2048),"conditioning"),
+                        DreamLiteAbi.Tensor("mask","float32",listOf(1,-1),"attention_mask"),
+                        DreamLiteAbi.Tensor("ids","float32",listOf(1,2),"time_ids")
+                    ),
+                    listOf(DreamLiteAbi.Tensor("noise","float32",listOf(1,4,128,256),"model_output")),
                 ),
-                "vae_decoder" to DreamLiteAbi.Component(listOf(t("latent","latent")), listOf(t("image","image"))),
+                "vae_decoder" to DreamLiteAbi.Component(
+                    listOf(DreamLiteAbi.Tensor("latent","float32",listOf(1,4,128,128),"latent")),
+                    listOf(DreamLiteAbi.Tensor("image","float32",listOf(1,3,1024,1024),"image"))
+                ),
             ),
             scheduler = DreamLiteScheduler.Config(1000, true, "exponential"),
             vae = DreamLiteAbi.Vae(1f, 0f),
