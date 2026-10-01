@@ -562,6 +562,16 @@ class BackendService : Service() {
             if (File(modelsDir, "V_PRED").exists()) {
                 command += "--use_v_pred"
             }
+            // A packaged vision encoder can be brought up independently through
+            // /identity/embed. Do not enable it for CPU/MNN-only backends: the
+            // binary is a QNN context and needs the HTP runtime.
+            val identityVision = File(modelsDir, "vision_encoder.bin")
+            if (identityVision.isFile && backendType != "sd15cpu" &&
+                backendType != "sdxlmnn" && backendType != BACKEND_TYPE_UPSCALER
+            ) {
+                command += listOf("--identity_vision", identityVision.absolutePath)
+                Log.i(TAG, "Identity vision encoder enabled: ${identityVision.name}")
+            }
             // The upscaler-mode process takes no safety-checker flag (same as
             // the standalone upscale screen's own invocation).
             if (BuildConfig.FLAVOR == "filter" && backendType != BACKEND_TYPE_UPSCALER) {
