@@ -143,11 +143,18 @@ object DreamLiteOrchestrator {
         latentShape: LatentShape? = null,
         outputWidth: Int? = null,
         outputHeight: Int? = null,
+        conditioner: DreamLiteConditioner? = null,
+        conditioningRequest: DreamLiteConditioning.Request? = null,
     ): PipelineState {
         val scheduler = requireNotNull(manifest.scheduler) {
             "DreamLite scheduler config is required"
         }
         val sigmas = DreamLiteScheduler.schedule(imageSeqLen, scheduler)
+        if (conditioner != null) {
+            conditioner.applyTo(state, requireNotNull(conditioningRequest) {
+                "DreamLite conditioning request is required when a conditioner is supplied"
+            })
+        }
         return executeRuntime(
             plan,
             runtime,
@@ -166,6 +173,7 @@ object DreamLiteOrchestrator {
                     )
                 }
             },
+            skipTextEncoder = conditioner != null,
             afterDenoise = { step, pipeline ->
                 if (latentShape != null) cropModelOutputToLatent(pipeline, latentShape)
                 executeScheduledStep(pipeline, sigmas[step], sigmas[step + 1])
@@ -201,11 +209,12 @@ object DreamLiteOrchestrator {
         state: PipelineState,
         beforeDenoise: (Int, PipelineState) -> Unit = { _, _ -> },
         afterDenoise: (Int, PipelineState) -> Unit = { _, _ -> },
+        skipTextEncoder: Boolean = false,
     ): PipelineState =
         executeStateful(plan, state) { stage, step, pipeline ->
             when (stage) {
                 Stage.TEXT_ENCODER ->
-                    runComponent(runtime, manifest, "text_encoder", pipeline)
+                    if (!skipTextEncoder) runComponent(runtime, manifest, "text_encoder", pipeline)
                 Stage.REFERENCE_ENCODER ->
                     runComponent(runtime, manifest, "vae_encoder", pipeline)
                 Stage.UNET -> {
