@@ -47,7 +47,7 @@ set(PREBUILT_LIB_DIR "android_aarch64" CACHE STRING "" FORCE)
 
 add_subdirectory("${SDCPP_DIR}" sdcpp EXCLUDE_FROM_ALL)
 
-add_library(dit_engine SHARED DitEngine.cpp)
+add_library(dit_engine SHARED DitEngine.cpp DreamLiteConditionBridge.cpp)
 
 target_include_directories(dit_engine PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/../include"
