@@ -13,7 +13,7 @@ class DreamLiteLiteRtTest {
     private fun writeAbi(dir: File, version: Int = 1, steps: Int = 4) {
         val component = """{"inputs":[{"name":"in","dtype":"float32","shape":[1,1]}],"outputs":[{"name":"out","dtype":"float32","shape":[1,1]}]}"""
         File(dir, DreamLiteAbi.MANIFEST).writeText(
-            """{"abi_version":$version,"runtime":"dreamlite_litert","steps":$steps,"components":{"unet":$component,"vae_encoder":$component,"vae_decoder":$component,"text_encoder":$component}}""",
+            """{"abi_version":$version,"runtime":"dreamlite_litert","steps":$steps,"scheduler":{"num_train_timesteps":1000,"use_dynamic_shifting":true,"time_shift_type":"exponential","base_image_seq_len":256,"max_image_seq_len":4096,"base_shift":0.5,"max_shift":1.16},"components":{"unet":$component,"vae_encoder":$component,"vae_decoder":$component,"text_encoder":$component}}""",
         )
     }
 
