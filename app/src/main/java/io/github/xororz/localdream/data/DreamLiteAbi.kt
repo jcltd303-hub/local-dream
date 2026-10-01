@@ -127,14 +127,17 @@ object DreamLiteAbi {
         val unetInputs = unet.inputs.map { it.stateKey }.toSet()
         val unetOutputs = unet.outputs.map { it.stateKey }.toSet()
         val requiredUnetInputs = setOf(
-            DreamLiteOrchestrator.LATENT_STATE_KEY,
+            DreamLiteOrchestrator.MODEL_INPUT_STATE_KEY,
             DreamLiteOrchestrator.TIMESTEP_STATE_KEY,
+            DreamLiteOrchestrator.CONDITIONING_STATE_KEY,
+            DreamLiteOrchestrator.ATTENTION_MASK_STATE_KEY,
+            DreamLiteOrchestrator.TIME_IDS_STATE_KEY,
         )
         if (!unetInputs.containsAll(requiredUnetInputs) ||
             DreamLiteOrchestrator.MODEL_OUTPUT_STATE_KEY !in unetOutputs
         ) {
             return ParseResult.Invalid(
-                "DreamLite ABI UNet must route latent + timestep inputs and model_output output",
+                "DreamLite ABI UNet must route model_input, timestep, conditioning, attention_mask, time_ids and model_output",
             )
         }
 
