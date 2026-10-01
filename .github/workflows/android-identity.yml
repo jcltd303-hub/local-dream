@@ -87,6 +87,19 @@ jobs:
           test -d "$QNN_SDK_ROOT/lib/aarch64-android"
           echo "QNN_SDK_ROOT=$QNN_SDK_ROOT" >> "$GITHUB_ENV"
           echo "Using QNN SDK at $QNN_SDK_ROOT"
+      - name: Stage Qualcomm runtime assets
+        run: |
+          rm -rf app/src/main/assets/qnnlibs
+          mkdir -p app/src/main/assets/qnnlibs
+          cp "$QNN_SDK_ROOT/lib/aarch64-android/libQnnHtp.so" app/src/main/assets/qnnlibs/
+          cp "$QNN_SDK_ROOT/lib/aarch64-android/libQnnSystem.so" app/src/main/assets/qnnlibs/
+          for arch in 68 69 73 75 79 81; do
+            cp "$QNN_SDK_ROOT/lib/aarch64-android/libQnnHtpV${arch}Stub.so" app/src/main/assets/qnnlibs/
+            cp "$QNN_SDK_ROOT/lib/hexagon-v${arch}/unsigned/libQnnHtpV${arch}.so" app/src/main/assets/qnnlibs/
+            cp "$QNN_SDK_ROOT/lib/hexagon-v${arch}/unsigned/libQnnHtpV${arch}Skel.so" app/src/main/assets/qnnlibs/
+          done
+          echo "Staged QNN runtime assets:"
+          ls -lh app/src/main/assets/qnnlibs
       - name: Install Rust Android target
         run: rustup target add aarch64-linux-android
       - name: Install conversion test dependency
@@ -111,6 +124,16 @@ jobs:
             echo "::error::APK is missing lib/arm64-v8a/libstable_diffusion_core.so"
             exit 1
           fi
+          for required in \
+            assets/qnnlibs/libQnnHtp.so \
+            assets/qnnlibs/libQnnSystem.so \
+            assets/qnnlibs/libQnnHtpV75Stub.so \
+            assets/qnnlibs/libQnnHtpV75Skel.so; do
+            if ! grep -Fq "$required" "$RUNNER_TEMP/apk-contents.txt"; then
+              echo "::error::APK is missing $required"
+              exit 1
+            fi
+          done
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
