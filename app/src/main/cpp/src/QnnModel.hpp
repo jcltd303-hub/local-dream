@@ -303,6 +303,40 @@ class QnnModel : public QnnSampleApp {
     return returnStatus;
   }
 
+  // Generic single-input vision/embedding graph execution. This deliberately
+  // lives below the diffusion-specific helpers so identity encoders can be
+  // benchmarked independently before an adapter-compatible UNet is enabled.
+  // Input/output element counts are validated against the compiled QNN graph;
+  // callers never get to guess tensor shapes.
+  StatusCode executeEmbeddingGraph(const float *input, size_t input_elems,
+                                   std::vector<float> &output) {
+    if (!input || !ensureIoTensors()) return StatusCode::FAILURE;
+    auto graphInfo = (*m_graphsInfo)[0];
+    if (graphInfo.numInputTensors != 1 || graphInfo.numOutputTensors != 1) {
+      QNN_ERROR("embedding graph expects 1 input/1 output, got %u/%u",
+                graphInfo.numInputTensors, graphInfo.numOutputTensors);
+      return StatusCode::FAILURE;
+    }
+    const size_t expected = tensorElems(inputs[0]);
+    if (expected != input_elems) {
+      QNN_ERROR("embedding input shape mismatch: graph=%zu caller=%zu",
+                expected, input_elems);
+      return StatusCode::FAILURE;
+    }
+    if (m_ioTensor.copyFromFloatToNative(input, &inputs[0]) !=
+        qnn::tools::iotensor::StatusCode::SUCCESS)
+      return StatusCode::FAILURE;
+    if (!runGraph(graphInfo, "identity vision encoder"))
+      return StatusCode::FAILURE;
+    output.resize(tensorElems(outputs[0]));
+    if (m_ioTensor.convertToFloatInto(output.data(), &outputs[0]) !=
+        qnn::tools::iotensor::StatusCode::SUCCESS) {
+      output.clear();
+      return StatusCode::FAILURE;
+    }
+    return StatusCode::SUCCESS;
+  }
+
   StatusCode executeVaeEncoderGraphs(float *pixel_values, float *mean,
                                      float *std) {
     auto returnStatus = StatusCode::SUCCESS;
