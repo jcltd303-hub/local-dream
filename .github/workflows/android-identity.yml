@@ -2,7 +2,7 @@ name: Android Identity Build
 
 on:
   push:
-    branches: [master, feat/identity-reference]
+    branches: [master]
   pull_request:
     branches: [master]
   workflow_dispatch:
