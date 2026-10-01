@@ -489,12 +489,29 @@ class BackendService : Service() {
                 val probe = packageConfig?.let { DreamLiteLiteRt.probe(modelsDir, it) }
                 val message = when (probe) {
                     is DreamLiteLiteRt.ProbeResult.Ready -> {
-                        when (val runtime = DreamLiteRuntimeFactory.create(probe.modelPackage)) {
-                            is DreamLiteRuntimeFactory.Result.Available -> {
-                                runtime.runtime.close()
-                                "DreamLite LiteRT runtime probe succeeded but generation service is not wired yet"
+                        val missingQnn = DreamLiteRuntimeFactory.missingQnnLibraries(runtimeDir)
+                        if (missingQnn.isNotEmpty()) {
+                            "DreamLite NPU runtime missing: ${missingQnn.joinToString()}"
+                        } else {
+                            when (val runtime = DreamLiteRuntimeFactory.create(probe.modelPackage)) {
+                                is DreamLiteRuntimeFactory.Result.Available -> {
+                                    val diagnostics = runtime.runtime.inspect()
+                                    runtime.runtime.close()
+                                    if (diagnostics.cpuFallback ||
+                                        !diagnostics.accelerator.equals(
+                                            DreamLiteRuntimeFactory.REQUIRED_ACCELERATOR,
+                                            ignoreCase = true,
+                                        )
+                                    ) {
+                                        "DreamLite runtime rejected: accelerator=" +
+                                            "${diagnostics.accelerator}, " +
+                                            "cpuFallback=${diagnostics.cpuFallback}"
+                                    } else {
+                                        "DreamLite LiteRT NPU probe succeeded; generation wiring pending"
+                                    }
+                                }
+                                is DreamLiteRuntimeFactory.Result.Unavailable -> runtime.reason
                             }
-                            is DreamLiteRuntimeFactory.Result.Unavailable -> runtime.reason
                         }
                     }
                     is DreamLiteLiteRt.ProbeResult.Invalid -> probe.reason
