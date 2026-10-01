@@ -2,7 +2,7 @@ name: Android Identity Build
 
 on:
   push:
-    branches: [master]
+    branches: [master, feat/autonomous-asset-runner]
   pull_request:
     branches: [master]
   workflow_dispatch:
