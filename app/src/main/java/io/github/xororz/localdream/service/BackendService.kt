@@ -494,7 +494,7 @@ class BackendService : Service() {
                 }
                 val packageConfig = ModelConfig.read(modelsDir)
                 val probe = packageConfig?.let { DreamLiteLiteRt.probe(modelsDir, it) }
-                val message = when (probe) {
+                val validationError = when (probe) {
                     is DreamLiteLiteRt.ProbeResult.Ready -> {
                         val missingQnn = DreamLiteRuntimeFactory.missingQnnLibraries(runtimeDir)
                         if (missingQnn.isNotEmpty()) {
@@ -506,12 +506,11 @@ class BackendService : Service() {
                                     runtime.runtime.close()
                                     when (val abi = DreamLiteAbi.parse(probe.modelPackage.abiManifest)) {
                                         is DreamLiteAbi.ParseResult.Invalid -> abi.reason
-                                        is DreamLiteAbi.ParseResult.Valid -> {
+                                        is DreamLiteAbi.ParseResult.Valid ->
                                             DreamLiteRuntimeFactory.validateDiagnostics(
                                                 abi.manifest,
                                                 diagnostics,
-                                            ) ?: "DreamLite software runtime is ready; S24 NPU delegation must be verified on-device"
-                                        }
+                                            )
                                     }
                                 }
                                 is DreamLiteRuntimeFactory.Result.Unavailable -> runtime.reason
@@ -521,9 +520,18 @@ class BackendService : Service() {
                     is DreamLiteLiteRt.ProbeResult.Invalid -> probe.reason
                     null -> "DreamLite LiteRT config is missing or unreadable"
                 }
-                Log.e(TAG, message)
-                updateState(BackendState.Error(message, modelId))
-                return false
+                if (validationError != null) {
+                    Log.e(TAG, validationError)
+                    updateState(BackendState.Error(validationError, modelId))
+                    return false
+                }
+                if (!DitEngine.isInstalled(this)) {
+                    val message = "DreamLite Qwen conditioner requires the installed DiT engine"
+                    Log.e(TAG, message)
+                    updateState(BackendState.Error(message, modelId))
+                    return false
+                }
+                Log.i(TAG, "DreamLite package validated; starting conditioner-only native host")
             }
 
             val executableFile = File(nativeDir, EXECUTABLE_NAME)
