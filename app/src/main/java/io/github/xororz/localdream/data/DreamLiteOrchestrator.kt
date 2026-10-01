@@ -10,6 +10,13 @@ package io.github.xororz.localdream.data
 object DreamLiteOrchestrator {
     const val DENOISE_STEPS = DreamLiteAbi.EXPECTED_STEPS
 
+    /** Official DreamLite Mobile default: linspace(1.0, 1 / steps, steps). */
+    val DEFAULT_SIGMAS: List<Float> =
+        List(DENOISE_STEPS) { index ->
+            1.0f - index * ((1.0f - 1.0f / DENOISE_STEPS) / (DENOISE_STEPS - 1))
+        }
+
+
     enum class Stage { TEXT_ENCODER, REFERENCE_ENCODER, UNET, VAE_DECODER }
 
     data class Plan(
