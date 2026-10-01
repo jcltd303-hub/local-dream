@@ -10,7 +10,7 @@ class DreamLiteAbiTest {
         assertEquals(4, DreamLiteAbi.EXPECTED_STEPS)
         assertEquals("dreamlite_abi.json", DreamLiteAbi.MANIFEST)
         assertEquals(
-            setOf("unet", "vae_encoder", "vae_decoder", "text_encoder"),
+            setOf("unet", "vae_encoder", "vae_decoder"),
             DreamLiteAbi.requiredComponents,
         )
     }
