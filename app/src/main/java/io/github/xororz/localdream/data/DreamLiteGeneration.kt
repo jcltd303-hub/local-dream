@@ -4,7 +4,7 @@ import kotlin.math.ln
 import kotlin.math.sqrt
 import kotlin.math.cos
 import kotlin.math.PI
-import kotlin.random.Random
+import java.util.Random
 
 /** Pure orchestration entry point used by the Android service and host tests. */
 object DreamLiteGeneration {
