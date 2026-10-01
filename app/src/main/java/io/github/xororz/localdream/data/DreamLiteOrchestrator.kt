@@ -138,6 +138,9 @@ object DreamLiteOrchestrator {
         manifest: DreamLiteAbi.Manifest,
         state: PipelineState,
         imageSeqLen: Int,
+        latentShape: LatentShape? = null,
+        outputWidth: Int? = null,
+        outputHeight: Int? = null,
     ): PipelineState {
         val scheduler = requireNotNull(manifest.scheduler) {
             "DreamLite scheduler config is required"
@@ -152,8 +155,17 @@ object DreamLiteOrchestrator {
                 val sigma = sigmas[step]
                 pipeline.tensors[TIMESTEP_STATE_KEY] =
                     floatArrayOf(DreamLiteScheduler.timestep(sigma, scheduler))
+                if (latentShape != null) {
+                    prepareSpatialConditioning(
+                        pipeline,
+                        latentShape,
+                        requireNotNull(outputWidth),
+                        requireNotNull(outputHeight),
+                    )
+                }
             },
             afterDenoise = { step, pipeline ->
+                if (latentShape != null) cropModelOutputToLatent(pipeline, latentShape)
                 executeScheduledStep(pipeline, sigmas[step], sigmas[step + 1])
             },
         )
