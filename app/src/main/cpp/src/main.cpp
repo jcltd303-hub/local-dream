@@ -846,10 +846,24 @@ int main(int argc, char **argv) {
   std::unique_ptr<Pipeline> pipeline;
   std::unique_ptr<QnnModel> identity_vision;
   std::unique_ptr<QnnModel> identity_adapter;
+  std::unique_ptr<DreamLiteConditionerHost> dreamlite_conditioner;
   MNN::Interpreter *safety_interpreter = nullptr;
   MNN::Session *safety_session = nullptr;
 
-  if (opts.upscaler_mode) {
+  if (opts.dreamlite_conditioner_mode) {
+    const std::filesystem::path dir(opts.model_dir);
+    const auto engine_path = (std::filesystem::path(opts.lib_dir) / "libdit_engine.so").string();
+    const auto llm_path = (dir / "dreamlite_conditioning_llm.gguf").string();
+    const auto vision_path = (dir / "dreamlite_conditioning_vision.gguf").string();
+    for (const auto &p : {engine_path, llm_path, vision_path}) {
+      if (!std::filesystem::exists(p)) showHelpAndExit("File not found: " + p);
+    }
+    dreamlite_conditioner = std::make_unique<DreamLiteConditionerHost>();
+    if (!dreamlite_conditioner->initialize(engine_path, llm_path, vision_path, opts.dit_threads))
+      showHelpAndExit("DreamLite conditioner initialization failed: " +
+                      dreamlite_conditioner->last_error());
+    QNN_INFO("DreamLite conditioner-only mode ready");
+  } else if (opts.upscaler_mode) {
     QNN_INFO("Upscaler mode - skipping MNN and QNN model initialization");
     // QNN upscalers need --lib_dir; MNN-only upscaling runs without it.
     if (!opts.lib_dir.empty() && !qnn_runtime::init(opts.lib_dir))
@@ -976,6 +990,48 @@ int main(int argc, char **argv) {
   svr.Get("/health", [](const httplib::Request &, httplib::Response &res) {
     res.status = 200;
   });
+
+  if (dreamlite_conditioner) {
+    svr.Post("/dreamlite/condition", [&dreamlite_conditioner](const httplib::Request &request,
+                                                               httplib::Response &res) {
+      try {
+        const auto json = nlohmann::json::parse(request.body);
+        const std::string prompt = json.at("prompt").get<std::string>();
+        const int drop = json.value("drop_prefix_tokens", 0);
+        const int width = json.value("reference_width", 0);
+        const int height = json.value("reference_height", 0);
+        std::vector<uint8_t> rgb;
+        if (json.contains("reference_rgb")) {
+          const std::string decoded = base64_decode(json.at("reference_rgb").get<std::string>());
+          rgb.assign(decoded.begin(), decoded.end());
+          if (width <= 0 || height <= 0 ||
+              rgb.size() != static_cast<size_t>(width) * height * 3)
+            throw std::invalid_argument("invalid DreamLite reference RGB payload");
+        }
+        std::vector<float> hidden;
+        std::vector<float> mask;
+        int sequence = 0;
+        int hidden_size = 0;
+        const auto start = std::chrono::high_resolution_clock::now();
+        std::lock_guard<std::mutex> lock(g_generation_mutex);
+        if (!dreamlite_conditioner->encode(
+                prompt, rgb.empty() ? nullptr : rgb.data(), width, height, drop,
+                hidden, mask, sequence, hidden_size))
+          throw std::runtime_error(dreamlite_conditioner->last_error());
+        const auto latency_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::high_resolution_clock::now() - start).count();
+        nlohmann::json out = {
+            {"sequence_length", sequence}, {"hidden_size", hidden_size},
+            {"latency_ms", latency_ms}, {"hidden_states", hidden},
+            {"attention_mask", mask}};
+        res.set_content(out.dump(), "application/json");
+      } catch (const std::exception &e) {
+        res.status = 400;
+        res.set_content(nlohmann::json({{"error", e.what()}}).dump(),
+                        "application/json");
+      }
+    });
+  }
 
   if (identity_vision) {
     svr.Post("/identity/embed", [&identity_vision](const httplib::Request &request,
