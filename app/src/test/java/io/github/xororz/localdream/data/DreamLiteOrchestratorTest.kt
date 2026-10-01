@@ -166,7 +166,7 @@ class DreamLiteOrchestratorTest {
                 "text_encoder" -> mapOf("conditioning_out" to floatArrayOf(1f))
                 "unet" -> {
                     seenTimesteps += inputs.getValue("timestep")[0]
-                    mapOf("noise" to floatArrayOf(1f))
+                    mapOf("noise" to FloatArray(inputs.getValue("latent").size) { 1f })
                 }
                 "vae_decoder" -> mapOf("image_out" to inputs.getValue("latent"))
                 else -> error("unexpected component")
