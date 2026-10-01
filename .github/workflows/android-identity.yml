@@ -34,6 +34,22 @@ jobs:
             app/src/main/cpp/3rdparty/tokenizers-cpp \
             app/src/main/cpp/3rdparty/stable-diffusion.cpp
           git -C app/src/main/cpp/3rdparty/tokenizers-cpp submodule update --init --recursive --depth 1
+      - name: Patch tokenizers for current Rust
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path("app/src/main/cpp/3rdparty/tokenizers-cpp/rust/src/lib.rs")
+          s = p.read_text()
+          s = s.replace(
+              "*out_len = (*handle).decode_str.len();",
+              "*out_len = (&(*handle).decode_str).len();",
+          )
+          s = s.replace(
+              "*out_len = (*handle).id_to_token_result.len();",
+              "*out_len = (&(*handle).id_to_token_result).len();",
+          )
+          p.write_text(s)
+          PY
       - name: Validate stable-diffusion.cpp patch
         run: git -C app/src/main/cpp/3rdparty/stable-diffusion.cpp apply --check ../../dit/stable-diffusion.cpp.patch
       - uses: actions/setup-java@v4
