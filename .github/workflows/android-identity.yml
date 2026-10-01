@@ -34,6 +34,8 @@ jobs:
           distribution: temurin
           java-version: "17"
           cache: gradle
+      - name: Test DreamLite conversion tooling
+        run: python -m pytest -q tools/dreamlite_litert/test_emit_abi.py
       - name: Compile Kotlin
         run: ./gradlew compileBasicDebugKotlin
       - name: Unit tests
