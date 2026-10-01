@@ -83,6 +83,52 @@ class DreamLiteOrchestratorTest {
     }
 
     @Test
+    fun runtimeExecutionMapsStagesAndRunsFourUnetPasses() {
+        val calls = mutableListOf<String>()
+        val runtime = object : DreamLiteRuntime {
+            override fun inspect() = DreamLiteRuntime.Diagnostics(
+                "test", "npu", emptyList(), false
+            )
+            override fun runFloatComponent(
+                component: String,
+                inputs: Map<String, FloatArray>,
+            ): Map<String, FloatArray> {
+                calls += component
+                val input = inputs.values.first()[0]
+                return mapOf(component + "_out" to floatArrayOf(input + 1f))
+            }
+        }
+        fun component(name: String, inputKey: String, outputKey: String) =
+            DreamLiteAbi.Component(
+                listOf(DreamLiteAbi.Tensor(name + "_in", "float32", listOf(1), inputKey)),
+                listOf(DreamLiteAbi.Tensor(name + "_out", "float32", listOf(1), outputKey)),
+            )
+        val manifest = DreamLiteAbi.Manifest(
+            mapOf(
+                "text_encoder" to component("text_encoder", "prompt", "conditioning"),
+                "unet" to component("unet", "latent", "latent"),
+                "vae_decoder" to component("vae_decoder", "latent", "image"),
+            )
+        )
+        val state = DreamLiteOrchestrator.PipelineState(
+            linkedMapOf("prompt" to floatArrayOf(1f), "latent" to floatArrayOf(0f))
+        )
+        val steps = mutableListOf<Int>()
+        DreamLiteOrchestrator.executeRuntime(
+            DreamLiteOrchestrator.plan(false),
+            runtime,
+            manifest,
+            state,
+        ) { step, _ -> steps += step }
+        assertEquals(listOf(0, 1, 2, 3), steps)
+        assertEquals(
+            listOf("text_encoder", "unet", "unet", "unet", "unet", "vae_decoder"),
+            calls,
+        )
+        assertEquals(5f, state.tensors.getValue("image")[0])
+    }
+
+    @Test
     fun editEncodesReferenceBeforeDenoising() {
         val plan = DreamLiteOrchestrator.plan(true)
         assertTrue(plan.hasReferenceImage)
