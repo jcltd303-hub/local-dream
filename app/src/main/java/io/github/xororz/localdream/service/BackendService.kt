@@ -486,6 +486,12 @@ class BackendService : Service() {
             // same as having an executable LiteRT backend. Fail closed until the
             // dedicated Android runner is installed and validated.
             if (backendType == DreamLiteLiteRt.RUNTIME) {
+                if (!DreamLiteLiteRt.isSupportedNpuDevice()) {
+                    val message = "DreamLite LiteRT NPU backend requires a supported Qualcomm SM8650+ device"
+                    Log.e(TAG, message)
+                    updateState(BackendState.Error(message, modelId))
+                    return false
+                }
                 val packageConfig = ModelConfig.read(modelsDir)
                 val probe = packageConfig?.let { DreamLiteLiteRt.probe(modelsDir, it) }
                 val message = when (probe) {
