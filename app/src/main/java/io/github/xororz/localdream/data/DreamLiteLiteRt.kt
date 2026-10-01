@@ -35,9 +35,12 @@ object DreamLiteLiteRt {
         val vaeDecoder: File,
         val textEncoder: File,
         val abiManifest: File,
+        val conditioningLlm: File? = null,
+        val conditioningVision: File? = null,
     ) {
         val files: List<File>
-            get() = listOf(unet, vaeEncoder, vaeDecoder, textEncoder, abiManifest)
+            get() = listOfNotNull(unet, vaeEncoder, vaeDecoder, textEncoder, abiManifest,
+                conditioningLlm, conditioningVision)
     }
 
     sealed interface ProbeResult {
@@ -80,13 +83,22 @@ object DreamLiteLiteRt {
             ?: return ProbeResult.Invalid("missing or invalid DreamLite text encoder")
         val abiManifest = component(DreamLiteAbi.MANIFEST)
             ?: return ProbeResult.Invalid("missing or invalid ${DreamLiteAbi.MANIFEST}")
+        val conditioningLlm = component(config.dreamliteConditioningLlm)
+        val conditioningVision = component(config.dreamliteConditioningVision)
+        if (config.dreamliteMultimodalConditioning == true) {
+            if (conditioningLlm == null)
+                return ProbeResult.Invalid("missing DreamLite Qwen conditioning LLM")
+            if (conditioningVision == null)
+                return ProbeResult.Invalid("missing DreamLite Qwen vision conditioner")
+        }
         when (val abi = DreamLiteAbi.parse(abiManifest)) {
             is DreamLiteAbi.ParseResult.Invalid -> return ProbeResult.Invalid(abi.reason)
             is DreamLiteAbi.ParseResult.Valid -> Unit
         }
 
         return ProbeResult.Ready(
-            Package(unet, vaeEncoder, vaeDecoder, textEncoder, abiManifest),
+            Package(unet, vaeEncoder, vaeDecoder, textEncoder, abiManifest,
+                conditioningLlm, conditioningVision),
         )
     }
 }
