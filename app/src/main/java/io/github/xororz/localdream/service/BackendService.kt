@@ -478,6 +478,30 @@ class BackendService : Service() {
             val nativeDir = applicationInfo.nativeLibraryDir
             val modelsDir = File(Model.getModelsDir(this), modelId)
 
+            // DreamLite/LiteRT is intentionally not routed through the legacy
+            // stable-diffusion/QNN executable. Recognizing a package is not the
+            // same as having an executable LiteRT backend. Fail closed until the
+            // dedicated Android runner is installed and validated.
+            if (backendType == "dreamlite_litert") {
+                val packageConfig = ModelConfig.read(modelsDir)
+                val required = listOf(
+                    packageConfig?.dreamliteUnet,
+                    packageConfig?.dreamliteVaeEncoder,
+                    packageConfig?.dreamliteVaeDecoder,
+                    packageConfig?.dreamliteTextEncoder,
+                )
+                val packageReady = packageConfig?.runtime == "dreamlite_litert" &&
+                    required.all { name -> !name.isNullOrBlank() && File(modelsDir, name).isFile }
+                val message = if (packageReady) {
+                    "DreamLite LiteRT package recognized; Android LiteRT runner not installed yet"
+                } else {
+                    "DreamLite LiteRT package is incomplete"
+                }
+                Log.e(TAG, message)
+                updateState(BackendState.Error(message, modelId))
+                return false
+            }
+
             val executableFile = File(nativeDir, EXECUTABLE_NAME)
 
             if (!executableFile.exists()) {
