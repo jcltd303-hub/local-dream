@@ -11,11 +11,12 @@ class DreamLiteLiteRtTest {
     val temp = TemporaryFolder()
 
     private fun writeAbi(dir: File, version: Int = 1, steps: Int = 4) {
-        val generic = """{"inputs":[{"name":"in","dtype":"float32","shape":[1,1],"state_key":"input"}],"outputs":[{"name":"out","dtype":"float32","shape":[1,1],"state_key":"output"}]}"""
+        val encoder = """{"inputs":[{"name":"image","dtype":"float32","shape":[1,3,1024,1024],"state_key":"reference_image"}],"outputs":[{"name":"latent","dtype":"float32","shape":[1,4,128,128],"state_key":"reference_latent"}]}"""
+        val textEncoder = """{"inputs":[{"name":"tokens","dtype":"int32","shape":[1,77],"state_key":"tokens"}],"outputs":[{"name":"hidden","dtype":"float32","shape":[1,77,2048],"state_key":"conditioning"},{"name":"attention_mask","dtype":"float32","shape":[1,77],"state_key":"attention_mask"}]}"""
         val unet = """{"inputs":[{"name":"sample","dtype":"float32","shape":[1,4,128,256],"state_key":"model_input"},{"name":"timestep","dtype":"float32","shape":[1],"state_key":"timestep"},{"name":"encoder_hidden_states","dtype":"float32","shape":[1,77,2048],"state_key":"conditioning"},{"name":"encoder_attention_mask","dtype":"float32","shape":[1,77],"state_key":"attention_mask"},{"name":"time_ids","dtype":"float32","shape":[1,2],"state_key":"time_ids"}],"outputs":[{"name":"noise_pred","dtype":"float32","shape":[1,4,128,256],"state_key":"model_output"}]}"""
         val decoder = """{"inputs":[{"name":"latent","dtype":"float32","shape":[1,1],"state_key":"latent"}],"outputs":[{"name":"image","dtype":"float32","shape":[1,1],"state_key":"image"}]}"""
         File(dir, DreamLiteAbi.MANIFEST).writeText(
-            """{"abi_version":$version,"runtime":"dreamlite_litert","steps":$steps,"scheduler":{"num_train_timesteps":1000,"use_dynamic_shifting":true,"time_shift_type":"exponential","base_image_seq_len":256,"max_image_seq_len":4096,"base_shift":0.5,"max_shift":1.16},"vae":{"scaling_factor":1.0,"shift_factor":0.0},"components":{"unet":$unet,"vae_encoder":$generic,"vae_decoder":$decoder,"text_encoder":$generic}}""",
+            """{"abi_version":$version,"runtime":"dreamlite_litert","steps":$steps,"scheduler":{"num_train_timesteps":1000,"use_dynamic_shifting":true,"time_shift_type":"exponential","base_image_seq_len":256,"max_image_seq_len":4096,"base_shift":0.5,"max_shift":1.16},"vae":{"scaling_factor":1.0,"shift_factor":0.0},"components":{"unet":$unet,"vae_encoder":$encoder,"vae_decoder":$decoder,"text_encoder":$textEncoder}}""",
         )
     }
 
