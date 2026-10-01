@@ -1,10 +1,26 @@
 package io.github.xororz.localdream.data
 
 import java.io.File
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DreamLiteGenerationTest {
+    @Test
+    fun latentNoiseIsDeterministicStandardGaussian() {
+        val a = DreamLiteGeneration.gaussianNoise(100_000, 42L)
+        val b = DreamLiteGeneration.gaussianNoise(100_000, 42L)
+        assertArrayEquals(a, b, 0f)
+        val mean = a.sum().toDouble() / a.size
+        val variance = a.fold(0.0) { acc, value ->
+            val d = value - mean
+            acc + d * d
+        } / a.size
+        assertTrue(kotlin.math.abs(mean) < 0.02)
+        assertTrue(kotlin.math.abs(variance - 1.0) < 0.03)
+    }
+
     @Test
     fun generationRunsConditionerFourDenoiseStepsAndDecoder() {
         val calls = mutableListOf<String>()
