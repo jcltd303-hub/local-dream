@@ -54,29 +54,60 @@ data class AutonomousAssetPlan(
     }
 
     companion object {
+        private const val MAX_JOBS = 500
+        private const val MAX_REFERENCES_PER_JOB = 8
+        private const val MAX_DIMENSION = 4096
+        private const val MAX_STEPS = 200
+
         fun parse(raw: String): AutonomousAssetPlan = parse(JSONObject(raw))
 
         fun parse(json: JSONObject): AutonomousAssetPlan {
             val jobsJson = json.getJSONArray("jobs")
-            require(jobsJson.length() > 0) { "Autonomous asset plan must contain at least one job" }
+            require(jobsJson.length() in 1..MAX_JOBS) {
+                "Autonomous asset plan must contain 1..$MAX_JOBS jobs"
+            }
 
+            val seenIds = mutableSetOf<String>()
             val jobs = buildList {
                 for (index in 0 until jobsJson.length()) {
                     val item = jobsJson.getJSONObject(index)
                     val references = item.optJSONArray("reference_images") ?: JSONArray()
+                    require(references.length() <= MAX_REFERENCES_PER_JOB) {
+                        "Job ${index + 1} has too many reference images"
+                    }
+
+                    val id = item.optString("id").ifBlank { "asset-${index + 1}" }
+                    require(seenIds.add(id)) { "Duplicate autonomous asset job id: $id" }
+
+                    val prompt = item.getString("prompt").trim()
+                    require(prompt.isNotEmpty()) { "Job ${index + 1} has an empty prompt" }
+
+                    val width = item.optInt("width", 1024)
+                    val height = item.optInt("height", 1024)
+                    require(width in 64..MAX_DIMENSION && height in 64..MAX_DIMENSION) {
+                        "Job $id dimensions must be 64..$MAX_DIMENSION"
+                    }
+
+                    val steps = item.optInt("steps", 28)
+                    require(steps in 1..MAX_STEPS) { "Job $id steps must be 1..$MAX_STEPS" }
+
+                    val cfg = item.optDouble("cfg", 7.0).toFloat()
+                    require(cfg.isFinite() && cfg >= 0f) { "Job $id cfg must be finite and non-negative" }
+
+                    val scheduler = item.optString("scheduler", "dpm").trim()
+                    require(scheduler.isNotEmpty()) { "Job $id scheduler is empty" }
+
                     add(
                         Job(
-                            id = item.optString("id").ifBlank { "asset-${index + 1}" },
-                            prompt = item.getString("prompt").trim().also {
-                                require(it.isNotEmpty()) { "Job ${index + 1} has an empty prompt" }
-                            },
+                            id = id,
+                            prompt = prompt,
                             negativePrompt = item.optString("negative_prompt", ""),
                             seed = if (item.has("seed") && !item.isNull("seed")) item.getLong("seed") else null,
-                            width = item.optInt("width", 1024),
-                            height = item.optInt("height", 1024),
-                            steps = item.optInt("steps", 28),
-                            cfg = item.optDouble("cfg", 7.0).toFloat(),
-                            scheduler = item.optString("scheduler", "dpm"),
+                            width = width,
+                            height = height,
+                            steps = steps,
+                            cfg = cfg,
+                            scheduler = scheduler,
                             referenceImages = buildList {
                                 for (refIndex in 0 until references.length()) {
                                     add(references.getString(refIndex))
@@ -87,9 +118,12 @@ data class AutonomousAssetPlan(
                 }
             }
 
+            val modelId = json.getString("model_id").trim()
+            require(modelId.isNotEmpty()) { "model_id is required" }
+
             return AutonomousAssetPlan(
                 runId = json.optString("run_id").ifBlank { "run-${System.currentTimeMillis()}" },
-                modelId = json.getString("model_id"),
+                modelId = modelId,
                 backendType = json.optString("backend_type").takeIf { it.isNotBlank() },
                 maxRetries = json.optInt("max_retries", 2).coerceIn(0, 10),
                 jobs = jobs,
