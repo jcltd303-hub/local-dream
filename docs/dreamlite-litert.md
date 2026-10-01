@@ -66,3 +66,25 @@ Do not mark this backend production-ready until both deterministic text-to-
 image and edit test vectors are within the agreed numerical/image tolerance of
 the PyTorch reference, the Android run completes without CPU fallback for the
 intended accelerator path, and licensing permits the intended distribution.
+
+
+## Verified Android execution route (2026-09)
+
+The current Google LiteRT stack supports diffusion/vision `.tflite` graphs through
+the CompiledModel API. Qualcomm HTP/NPU execution uses the Qualcomm dispatch
+plugin with QNN libraries. LiteRT documents both host AOT compilation and
+on-device JIT/AOT-cache modes. For the S24 research build we target on-device
+AOT caching: the first load compiles/partitions the original `.tflite` graph,
+then later loads reuse the cached context.
+
+Runtime acceptance remains strict:
+- request NPU explicitly;
+- package/load the Qualcomm dispatch/compiler plugin and required QNN runtime;
+- cache compiled contexts under app-private storage;
+- record compilation and inference timings;
+- reject benchmark results when required DreamLite partitions fall back to CPU.
+
+This means LiteRT is a runtime/dispatch layer, not a replacement for Qualcomm
+QNN on Snapdragon. The existing app QNN runtime assets may be reusable, but
+the LiteRT Qualcomm dispatch/compiler plugin is an additional required runtime
+component.
