@@ -321,7 +321,7 @@ class DreamLiteOrchestratorTest {
             linkedMapOf("latent" to floatArrayOf(2f))
         )
         DreamLiteOrchestrator.executeScheduledRuntime(
-            DreamLiteOrchestrator.plan(false), runtime, manifest, state, 256,
+            DreamLiteOrchestrator.plan(false), runtime, manifest, state, 4096,
             conditioner = conditioner,
             conditioningRequest = DreamLiteConditioning.Request(
                 DreamLiteConditioning.Mode.GENERATE, "portrait"
