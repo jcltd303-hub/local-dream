@@ -80,8 +80,12 @@ object DreamLiteOrchestrator {
     }
 
     const val LATENT_STATE_KEY = "latent"
+    const val MODEL_INPUT_STATE_KEY = "model_input"
     const val MODEL_OUTPUT_STATE_KEY = "model_output"
     const val TIMESTEP_STATE_KEY = "timestep"
+    const val CONDITIONING_STATE_KEY = "conditioning"
+    const val ATTENTION_MASK_STATE_KEY = "attention_mask"
+    const val TIME_IDS_STATE_KEY = "time_ids"
 
     fun executeScheduledRuntime(
         plan: Plan,
