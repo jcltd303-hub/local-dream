@@ -1,0 +1,33 @@
+name: Android Identity Build
+
+on:
+  push:
+    branches: [master, feat/identity-reference]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      - uses: android-actions/setup-android@v3
+      - name: Unit tests
+        run: ./gradlew testBasicDebugUnitTest
+      - name: Build basic debug APK
+        run: ./gradlew assembleBasicDebug
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-dream-identity-basic-debug
+          path: app/build/outputs/apk/basic/debug/*.apk
+          if-no-files-found: error
