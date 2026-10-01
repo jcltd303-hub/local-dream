@@ -23,9 +23,9 @@ object DreamLiteScheduler {
 
     fun shiftedSigma(rawSigma: Float, mu: Float, config: Config): Float {
         require(rawSigma in 0f..1f)
+        if (!config.useDynamicShifting) return rawSigma
         if (rawSigma == 1f) return 1f
         require(rawSigma > 0f)
-        if (!config.useDynamicShifting) return rawSigma
         val odds = 1.0 / rawSigma - 1.0
         return when (config.timeShiftType) {
             "exponential" -> {
