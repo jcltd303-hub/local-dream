@@ -209,7 +209,7 @@ object DreamLiteRuntimeFactory {
         // Touch the package here so callers cannot accidentally treat a runtime
         // as independent of the exact files validated by DreamLiteLiteRt.probe.
         val files = modelPackage.files
-        if (files.size != 5 || files.any { !it.isFile || it.length() <= 0L }) {
+        if (files.size < 5 || files.any { !it.isFile || it.length() <= 0L }) {
             return Result.Unavailable("DreamLite LiteRT package is no longer valid")
         }
         val manifest = when (val parsed = DreamLiteAbi.parse(modelPackage.abiManifest)) {
@@ -219,7 +219,8 @@ object DreamLiteRuntimeFactory {
         val start = System.nanoTime()
         val compiled = mutableListOf<Pair<File, CompiledModel>>()
         return try {
-            files.filter { it.extension == "tflite" }.forEach { file ->
+            listOf(modelPackage.unet, modelPackage.vaeEncoder, modelPackage.vaeDecoder,
+                modelPackage.textEncoder).forEach { file ->
                 compiled += file to CompiledModel.create(
                     file.absolutePath,
                     CompiledModel.Options(Accelerator.NPU),
