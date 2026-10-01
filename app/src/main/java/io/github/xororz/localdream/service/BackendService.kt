@@ -510,7 +510,7 @@ class BackendService : Service() {
                                             DreamLiteRuntimeFactory.validateDiagnostics(
                                                 abi.manifest,
                                                 diagnostics,
-                                            ) ?: "DreamLite LiteRT NPU probe succeeded; generation wiring pending"
+                                            ) ?: "DreamLite software runtime is ready; S24 NPU delegation must be verified on-device"
                                         }
                                     }
                                 }
