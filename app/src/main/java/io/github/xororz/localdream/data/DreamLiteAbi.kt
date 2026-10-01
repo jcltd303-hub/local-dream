@@ -174,6 +174,24 @@ object DreamLiteAbi {
             )
         }
 
+        val conditioningTensor = unet.inputs.first {
+            it.stateKey == DreamLiteOrchestrator.CONDITIONING_STATE_KEY
+        }
+        val attentionTensor = unet.inputs.first {
+            it.stateKey == DreamLiteOrchestrator.ATTENTION_MASK_STATE_KEY
+        }
+        if (conditioningTensor.shape != listOf(
+                1,
+                DreamLiteConditioner.SEQUENCE_LENGTH,
+                DreamLiteConditioner.HIDDEN_SIZE,
+            )
+        ) {
+            return ParseResult.Invalid("DreamLite ABI conditioning must use the fixed 512-token width")
+        }
+        if (attentionTensor.shape != listOf(1, DreamLiteConditioner.SEQUENCE_LENGTH)) {
+            return ParseResult.Invalid("DreamLite ABI attention_mask must use the fixed 512-token width")
+        }
+
         val encoderOutputs = parsed.getValue("vae_encoder").outputs.map { it.stateKey }.toSet()
         if (DreamLiteOrchestrator.REFERENCE_LATENT_STATE_KEY !in encoderOutputs) {
             return ParseResult.Invalid("DreamLite ABI VAE encoder must produce reference_latent state")
