@@ -30,7 +30,7 @@ class DreamLiteGenerationTest {
                 ),
                 "vae_decoder" to DreamLiteAbi.Component(listOf(t("latent","latent")), listOf(t("image","image"))),
             ),
-            scheduler = DreamLiteScheduler.Config(1000, false, "exponential"),
+            scheduler = DreamLiteScheduler.Config(1000, true, "exponential"),
             vae = DreamLiteAbi.Vae(1f, 0f),
         )
         val conditioner = object : DreamLiteConditioner {
