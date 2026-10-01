@@ -288,7 +288,7 @@ class DreamLiteOrchestratorTest {
                         assertEquals(7f, inputs.getValue("conditioning")[0], 0f)
                         assertEquals(1, inputs.getValue("mask").size)
                         assertEquals(1f, inputs.getValue("mask")[0], 0f)
-                        mapOf("noise" to floatArrayOf(0f))
+                        mapOf("noise" to FloatArray(inputs.getValue("latent").size))
                     }
                     "vae_decoder" -> mapOf("image" to inputs.getValue("latent"))
                     else -> error("unexpected component")
