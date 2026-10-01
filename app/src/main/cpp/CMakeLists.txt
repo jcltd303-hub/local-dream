@@ -28,6 +28,25 @@ foreach(lib QnnHtp QnnSystem)
     file(COPY "${QNN_SDK_ROOT}/lib/aarch64-android/lib${lib}.so"
         DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/qnnlibs")
 endforeach()
+
+# DreamLite's LiteRT Qualcomm dispatch layer reuses this exact QNN runtime.
+# Keep optional LiteRT vendor/plugin binaries in the same packaged runtime
+# directory when a build environment supplies them. The core app must still
+# build without LiteRT while the converted DreamLite ABI is being validated.
+set(LITERT_QUALCOMM_ROOT "$ENV{LITERT_QUALCOMM_ROOT}" CACHE PATH
+    "Optional LiteRT Qualcomm dispatch/compiler package root")
+if(LITERT_QUALCOMM_ROOT AND EXISTS "${LITERT_QUALCOMM_ROOT}")
+    file(GLOB LITERT_QUALCOMM_ANDROID_LIBS
+        "${LITERT_QUALCOMM_ROOT}/lib/aarch64-android/*.so"
+        "${LITERT_QUALCOMM_ROOT}/lib/arm64-v8a/*.so")
+    if(LITERT_QUALCOMM_ANDROID_LIBS)
+        file(COPY ${LITERT_QUALCOMM_ANDROID_LIBS}
+            DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/qnnlibs")
+        message(STATUS "Packaging optional LiteRT Qualcomm runtime from ${LITERT_QUALCOMM_ROOT}")
+    else()
+        message(WARNING "LITERT_QUALCOMM_ROOT set but no arm64 Android libraries found")
+    endif()
+endif()
 foreach(arch 68 69 73 75 79 81)
     file(COPY "${QNN_SDK_ROOT}/lib/aarch64-android/libQnnHtpV${arch}Stub.so"
         "${QNN_SDK_ROOT}/lib/hexagon-v${arch}/unsigned/libQnnHtpV${arch}.so"

@@ -134,6 +134,38 @@ data class Model(
 ) {
     val isDit: Boolean get() = ditKind.isNotEmpty()
 
+    val isDreamLiteLiteRt: Boolean
+        get() = configDefaults.runtime == "dreamlite_litert"
+
+    fun hasUsableDreamLiteLiteRtPackage(context: Context): Boolean {
+        if (!isDreamLiteLiteRt) return false
+        val dir = File(getModelsDir(context), id)
+        return DreamLiteLiteRt.probe(dir, configDefaults) is DreamLiteLiteRt.ProbeResult.Ready
+    }
+
+
+    // Native multimodal DiTs consume clean reference images directly. Modular
+    // SD models expose identity reference only when their package declares both
+    // a vision encoder and an adapter graph in config.json.
+    val supportsNativeReferenceEditing: Boolean
+        get() = ditKind == "klein" || ditKind == "qwen21"
+
+    val supportsExternalIdentityAdapter: Boolean
+        get() = configDefaults.identityAdapterType == "ip_adapter_sd15" &&
+            configDefaults.identityVisionEncoder != null &&
+            configDefaults.identityAdapter != null && !runOnCpu && !isDit && !isSdxl && !isAnima
+
+    fun hasUsableExternalIdentityAdapter(context: Context): Boolean {
+        if (!supportsExternalIdentityAdapter) return false
+        val dir = File(getModelsDir(context), id)
+        return File(dir, configDefaults.identityVisionEncoder!!).isFile &&
+            File(dir, configDefaults.identityAdapter!!).isFile
+    }
+
+    val supportsIdentityReference: Boolean
+        get() = supportsNativeReferenceEditing || supportsExternalIdentityAdapter ||
+            (isDreamLiteLiteRt && configDefaults.dreamliteMultimodalConditioning == true)
+
     // Per-field priority: code defaults > config.json > global defaults.
     val defaults: GenerationDefaults
         get() = codeDefaults.withFallback(configDefaults).resolve()
@@ -153,6 +185,7 @@ data class Model(
     // Backend --type value; each type implies the full model file layout.
     val backendType: String
         get() = when {
+            isDreamLiteLiteRt -> "dreamlite_litert"
             isDit -> ditKind
             isAnima -> "anima"
             isSdxl -> if (runOnCpu) "sdxlmnn" else "sdxl"

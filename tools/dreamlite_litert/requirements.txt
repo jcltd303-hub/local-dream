@@ -1,0 +1,6 @@
+# Conversion environment. Python 3.11 recommended by LiteRT Torch.
+litert-torch
+ai-edge-litert
+numpy
+torch
+pytest

@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "Config.hpp"
+#include "DreamLiteConditionerHost.hpp"
 #include "MnnUtils.hpp"
 #include "Pipeline.hpp"
 #include "PipelineAnima.hpp"
@@ -82,6 +83,7 @@ struct ServerOptions {
   bool lowram = false;
   bool anima_seq_dit = false;  // (anima+lowram) never co-resident DiT halves
   bool upscaler_mode = false;
+  bool dreamlite_conditioner_mode = false;
   bool convert_mode = false;
   // Run all three DiT modules on the Hexagon NPU. The Android catalog only
   // exposes these models on the SM8750-and-newer devices validated upstream.
@@ -92,6 +94,12 @@ struct ServerOptions {
   std::string dit_params_backend = "all=disk";
   int dit_threads = 4;
   int dit_vae_tile_size = 64;
+  // Optional standalone QNN vision encoder for identity-conditioning bring-up.
+  // Kept independent from the diffusion pipeline until adapter tensor contracts
+  // are verified for a packaged model.
+  std::string identity_vision_path;
+  std::string identity_adapter_path;
+  float identity_adapter_scale = 0.8f;
   bool convert_clip_skip_2 = false;
 
   bool isSdxl() const { return type == ModelType::kSdxl || type == ModelType::kSdxlMnn; }
@@ -112,6 +120,8 @@ static void showHelp() {
          "--model_dir <dir> [--lib_dir <dir>] [options]\n"
          "  stable_diffusion_core --upscaler_mode [--lib_dir <dir>] "
          "[options]\n"
+         "  stable_diffusion_core --dreamlite_conditioner --model_dir <dir> "
+         "--lib_dir <dir> [options]\n"
          "  stable_diffusion_core --convert <dir> [--clip_skip_2]\n"
          "\n"
          "Modes:\n"
@@ -120,6 +130,7 @@ static void showHelp() {
          "zimage/klein/qwen21 "
          "(DiT engine)\n"
          "  --upscaler_mode        Upscale-only server, no diffusion model\n"
+         "  --dreamlite_conditioner Qwen3-VL-only server for DreamLite LiteRT\n"
          "  --convert <dir>        Convert model.safetensors in <dir> to MNN "
          "and exit\n"
          "\n"
@@ -144,6 +155,9 @@ static void showHelp() {
          "  --anima_seq_dit        (anima+lowram) never keep both DiT halves "
          "resident; for 12GB devices\n"
          "  --clip_skip_2          (convert) export CLIP with skip 2\n"
+         "  --identity_vision <f>  Optional QNN vision encoder .bin for /identity/embed\n"
+         "  --identity_adapter <f> Optional adapter graph (validated before generation wiring)\n"
+         "  --identity_scale <f>   Adapter strength, clamped to 0..2\n"
          "  --log_level <n>        QNN log level\n"
          "  --version              Print QNN SDK build id\n"
          "  --help                 Show this help\n";
@@ -173,8 +187,12 @@ static ServerOptions processCommandLine(int argc, char **argv) {
     OPT_CONVERT_CLIP_SKIP_2,
     OPT_PATCH,
     OPT_UPSCALER_MODE,
+    OPT_DREAMLITE_CONDITIONER,
     OPT_LOWRAM,
     OPT_ANIMA_SEQ_DIT,
+    OPT_IDENTITY_VISION,
+    OPT_IDENTITY_ADAPTER,
+    OPT_IDENTITY_SCALE,
     OPT_LOG_LEVEL
   };
   static struct pal::Option s_longOptions[] = {
@@ -193,8 +211,12 @@ static ServerOptions processCommandLine(int argc, char **argv) {
       {"clip_skip_2", pal::no_argument, NULL, OPT_CONVERT_CLIP_SKIP_2},
       {"patch", pal::required_argument, NULL, OPT_PATCH},
       {"upscaler_mode", pal::no_argument, NULL, OPT_UPSCALER_MODE},
+      {"dreamlite_conditioner", pal::no_argument, NULL, OPT_DREAMLITE_CONDITIONER},
       {"lowram", pal::no_argument, NULL, OPT_LOWRAM},
       {"anima_seq_dit", pal::no_argument, NULL, OPT_ANIMA_SEQ_DIT},
+      {"identity_vision", pal::required_argument, NULL, OPT_IDENTITY_VISION},
+      {"identity_adapter", pal::required_argument, NULL, OPT_IDENTITY_ADAPTER},
+      {"identity_scale", pal::required_argument, NULL, OPT_IDENTITY_SCALE},
       {"log_level", pal::required_argument, NULL, OPT_LOG_LEVEL},
       {NULL, 0, NULL, 0}};
 
@@ -253,11 +275,23 @@ static ServerOptions processCommandLine(int argc, char **argv) {
       case OPT_UPSCALER_MODE:
         opts.upscaler_mode = true;
         break;
+      case OPT_DREAMLITE_CONDITIONER:
+        opts.dreamlite_conditioner_mode = true;
+        break;
       case OPT_LOWRAM:
         opts.lowram = true;
         break;
       case OPT_ANIMA_SEQ_DIT:
         opts.anima_seq_dit = true;
+        break;
+      case OPT_IDENTITY_VISION:
+        opts.identity_vision_path = pal::g_optArg;
+        break;
+      case OPT_IDENTITY_ADAPTER:
+        opts.identity_adapter_path = pal::g_optArg;
+        break;
+      case OPT_IDENTITY_SCALE:
+        opts.identity_adapter_scale = std::clamp(std::stof(pal::g_optArg), 0.0f, 2.0f);
         break;
       case OPT_LOG_LEVEL:
         logLevel = sample_app::parseLogLevel(pal::g_optArg);
@@ -272,6 +306,11 @@ static ServerOptions processCommandLine(int argc, char **argv) {
   }
 
   if (opts.upscaler_mode || opts.convert_mode) return opts;
+  if (opts.dreamlite_conditioner_mode) {
+    if (opts.model_dir.empty()) showHelpAndExit("Missing --model_dir");
+    if (opts.lib_dir.empty()) showHelpAndExit("Missing --lib_dir");
+    return opts;
+  }
 
   if (typeStr == "sd15cpu")
     opts.type = ServerOptions::ModelType::kSd15Cpu;
@@ -805,10 +844,26 @@ int main(int argc, char **argv) {
 
   std::unique_ptr<TextEncoder> text_encoder;
   std::unique_ptr<Pipeline> pipeline;
+  std::unique_ptr<QnnModel> identity_vision;
+  std::unique_ptr<QnnModel> identity_adapter;
+  std::unique_ptr<DreamLiteConditionerHost> dreamlite_conditioner;
   MNN::Interpreter *safety_interpreter = nullptr;
   MNN::Session *safety_session = nullptr;
 
-  if (opts.upscaler_mode) {
+  if (opts.dreamlite_conditioner_mode) {
+    const std::filesystem::path dir(opts.model_dir);
+    const auto engine_path = (std::filesystem::path(opts.lib_dir) / "libdit_engine.so").string();
+    const auto llm_path = (dir / "dreamlite_conditioning_llm.gguf").string();
+    const auto vision_path = (dir / "dreamlite_conditioning_vision.gguf").string();
+    for (const auto &p : {engine_path, llm_path, vision_path}) {
+      if (!std::filesystem::exists(p)) showHelpAndExit("File not found: " + p);
+    }
+    dreamlite_conditioner = std::make_unique<DreamLiteConditionerHost>();
+    if (!dreamlite_conditioner->initialize(engine_path, llm_path, vision_path, opts.dit_threads))
+      showHelpAndExit("DreamLite conditioner initialization failed: " +
+                      dreamlite_conditioner->last_error());
+    QNN_INFO("DreamLite conditioner-only mode ready");
+  } else if (opts.upscaler_mode) {
     QNN_INFO("Upscaler mode - skipping MNN and QNN model initialization");
     // QNN upscalers need --lib_dir; MNN-only upscaling runs without it.
     if (!opts.lib_dir.empty() && !qnn_runtime::init(opts.lib_dir))
@@ -900,6 +955,27 @@ int main(int argc, char **argv) {
     }
   }
 
+  if (!opts.identity_vision_path.empty()) {
+    if (!qnn_runtime::isInitialized())
+      showHelpAndExit("--identity_vision requires a QNN runtime");
+    if (!std::filesystem::exists(opts.identity_vision_path))
+      showHelpAndExit("Identity vision model not found: " + opts.identity_vision_path);
+    identity_vision = qnn_runtime::createModel(opts.identity_vision_path, "identity_vision");
+    if (!identity_vision || qnn_runtime::initializeApp("IdentityVision", identity_vision) != EXIT_SUCCESS)
+      showHelpAndExit("Identity vision model initialization failed");
+  }
+
+  if (!opts.identity_adapter_path.empty()) {
+    if (!identity_vision)
+      showHelpAndExit("--identity_adapter requires --identity_vision");
+    if (!std::filesystem::exists(opts.identity_adapter_path))
+      showHelpAndExit("Identity adapter model not found: " + opts.identity_adapter_path);
+    identity_adapter = qnn_runtime::createModel(opts.identity_adapter_path, "identity_adapter");
+    if (!identity_adapter || qnn_runtime::initializeApp("IdentityAdapter", identity_adapter) != EXIT_SUCCESS)
+      showHelpAndExit("Identity adapter model initialization failed");
+    QNN_INFO("Identity adapter loaded; default scale %.3f", opts.identity_adapter_scale);
+  }
+
   // --- HTTP Server ---
   httplib::Server svr;
   svr.set_default_headers({
@@ -915,6 +991,72 @@ int main(int argc, char **argv) {
     res.status = 200;
   });
 
+  if (dreamlite_conditioner) {
+    svr.Post("/dreamlite/condition", [&dreamlite_conditioner](const httplib::Request &request,
+                                                               httplib::Response &res) {
+      try {
+        const auto json = nlohmann::json::parse(request.body);
+        const std::string prompt = json.at("prompt").get<std::string>();
+        const int width = json.value("reference_width", 0);
+        const int height = json.value("reference_height", 0);
+        std::vector<uint8_t> rgb;
+        if (json.contains("reference_rgb")) {
+          const std::string decoded = base64_decode(json.at("reference_rgb").get<std::string>());
+          rgb.assign(decoded.begin(), decoded.end());
+          if (width <= 0 || height <= 0 ||
+              rgb.size() != static_cast<size_t>(width) * height * 3)
+            throw std::invalid_argument("invalid DreamLite reference RGB payload");
+        }
+        std::vector<float> hidden;
+        std::vector<float> mask;
+        int sequence = 0;
+        int hidden_size = 0;
+        const auto start = std::chrono::high_resolution_clock::now();
+        std::lock_guard<std::mutex> lock(g_generation_mutex);
+        if (!dreamlite_conditioner->encode(
+                prompt, rgb.empty() ? nullptr : rgb.data(), width, height,
+                hidden, mask, sequence, hidden_size))
+          throw std::runtime_error(dreamlite_conditioner->last_error());
+        const auto latency_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::high_resolution_clock::now() - start).count();
+        nlohmann::json out = {
+            {"sequence_length", sequence}, {"hidden_size", hidden_size},
+            {"latency_ms", latency_ms}, {"hidden_states", hidden},
+            {"attention_mask", mask}};
+        res.set_content(out.dump(), "application/json");
+      } catch (const std::exception &e) {
+        res.status = 400;
+        res.set_content(nlohmann::json({{"error", e.what()}}).dump(),
+                        "application/json");
+      }
+    });
+  }
+
+  if (identity_vision) {
+    svr.Post("/identity/embed", [&identity_vision](const httplib::Request &request,
+                                                   httplib::Response &res) {
+      try {
+        const auto json = nlohmann::json::parse(request.body);
+        const auto values = json.at("input").get<std::vector<float>>();
+        std::vector<float> embedding;
+        const auto start = std::chrono::high_resolution_clock::now();
+        std::lock_guard<std::mutex> lock(g_generation_mutex);
+        if (identity_vision->executeEmbeddingGraph(values.data(), values.size(), embedding) !=
+            StatusCode::SUCCESS)
+          throw std::runtime_error("identity vision execution failed");
+        const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::high_resolution_clock::now() - start).count();
+        double norm2 = 0.0;
+        for (float v : embedding) norm2 += static_cast<double>(v) * v;
+        nlohmann::json out = {{"elements", embedding.size()}, {"latency_ms", ms},
+                              {"l2_norm", std::sqrt(norm2)}, {"embedding", embedding}};
+        res.set_content(out.dump(), "application/json");
+      } catch (const std::exception &e) {
+        res.status = 400;
+        res.set_content(nlohmann::json({{"error", e.what()}}).dump(), "application/json");
+      }
+    });
+  }
   if (pipeline) registerGenerateEndpoint(svr, pipeline.get());
   registerUpscaleEndpoint(svr);
   if (text_encoder) registerTokenizeEndpoint(svr, text_encoder.get());

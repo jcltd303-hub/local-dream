@@ -24,6 +24,25 @@ data class ModelConfig(
     // Code-level only (not read from config.json): models whose img2img
     // semantics differ, like Klein's reference edit, pick their own default.
     val denoiseStrength: Float? = null,
+    // Optional identity/reference conditioning metadata. Native DiT reference
+    // editing does not require these fields; they describe external adapter
+    // packages (for example an IP-Adapter-style SD1.5/SDXL package).
+    val identityVisionEncoder: String? = null,
+    val identityAdapter: String? = null,
+    val identityAdapterScale: Float? = null,
+    // ABI identifier prevents loading an adapter compiled for a different
+    // conditioning scheme (Plus/FaceID/InstantID are intentionally distinct).
+    val identityAdapterType: String? = null,
+    // Optional alternate runtime. dreamlite_litert is experimental and keeps
+    // DreamLite separate from the existing QNN SD/DiT ABIs.
+    val runtime: String? = null,
+    val dreamliteUnet: String? = null,
+    val dreamliteVaeEncoder: String? = null,
+    val dreamliteVaeDecoder: String? = null,
+    val dreamliteTextEncoder: String? = null,
+    val dreamliteConditioningLlm: String? = null,
+    val dreamliteConditioningVision: String? = null,
+    val dreamliteMultimodalConditioning: Boolean? = null,
 ) {
     /** Field-by-field merge: values from this win, [other] fills the nulls. */
     fun withFallback(other: ModelConfig): ModelConfig = ModelConfig(
@@ -33,6 +52,18 @@ data class ModelConfig(
         cfg = cfg ?: other.cfg,
         scheduler = scheduler ?: other.scheduler,
         denoiseStrength = denoiseStrength ?: other.denoiseStrength,
+        identityVisionEncoder = identityVisionEncoder ?: other.identityVisionEncoder,
+        identityAdapter = identityAdapter ?: other.identityAdapter,
+        identityAdapterScale = identityAdapterScale ?: other.identityAdapterScale,
+        identityAdapterType = identityAdapterType ?: other.identityAdapterType,
+        runtime = runtime ?: other.runtime,
+        dreamliteUnet = dreamliteUnet ?: other.dreamliteUnet,
+        dreamliteVaeEncoder = dreamliteVaeEncoder ?: other.dreamliteVaeEncoder,
+        dreamliteVaeDecoder = dreamliteVaeDecoder ?: other.dreamliteVaeDecoder,
+        dreamliteTextEncoder = dreamliteTextEncoder ?: other.dreamliteTextEncoder,
+        dreamliteConditioningLlm = dreamliteConditioningLlm ?: other.dreamliteConditioningLlm,
+        dreamliteConditioningVision = dreamliteConditioningVision ?: other.dreamliteConditioningVision,
+        dreamliteMultimodalConditioning = dreamliteMultimodalConditioning ?: other.dreamliteMultimodalConditioning,
     )
 
     /** Fill any remaining nulls from the global defaults. */
@@ -74,6 +105,24 @@ data class ModelConfig(
                     steps = json.optFloatOrNull("default_steps")
                         ?.roundToInt()?.toFloat()?.coerceIn(STEPS_RANGE),
                     cfg = json.optFloatOrNull("default_cfg")?.coerceIn(CFG_RANGE),
+                    identityVisionEncoder = json.optStringOrNull("identity_vision_encoder"),
+                    identityAdapter = json.optStringOrNull("identity_adapter"),
+                    identityAdapterScale = json.optFloatOrNull("identity_adapter_scale")
+                        ?.coerceIn(0f, 2f),
+                    identityAdapterType = json.optStringOrNull("identity_adapter_type")
+                        ?.takeIf { it == "ip_adapter_sd15" },
+                    runtime = json.optStringOrNull("runtime")
+                        ?.takeIf { it == "dreamlite_litert" },
+                    dreamliteUnet = json.optStringOrNull("dreamlite_unet"),
+                    dreamliteVaeEncoder = json.optStringOrNull("dreamlite_vae_encoder"),
+                    dreamliteVaeDecoder = json.optStringOrNull("dreamlite_vae_decoder"),
+                    dreamliteTextEncoder = json.optStringOrNull("dreamlite_text_encoder"),
+                    dreamliteConditioningLlm = json.optStringOrNull("dreamlite_conditioning_llm"),
+                    dreamliteConditioningVision = json.optStringOrNull("dreamlite_conditioning_vision"),
+                    dreamliteMultimodalConditioning =
+                        if (json.has("dreamlite_multimodal_conditioning"))
+                            json.optBoolean("dreamlite_multimodal_conditioning")
+                        else null,
                     scheduler = json.optStringOrNull("default_scheduler")?.let { value ->
                         value.takeIf { it in VALID_SCHEDULERS }.also {
                             if (it == null) Log.w(TAG, "ignore unknown scheduler '$value' in ${file.path}")

@@ -9,7 +9,11 @@ import io.github.xororz.localdream.BuildConfig
 import io.github.xororz.localdream.R
 import io.github.xororz.localdream.data.DitEngine
 import io.github.xororz.localdream.data.DitResolution
+import io.github.xororz.localdream.data.DreamLiteAbi
+import io.github.xororz.localdream.data.DreamLiteLiteRt
+import io.github.xororz.localdream.data.DreamLiteRuntimeFactory
 import io.github.xororz.localdream.data.Model
+import io.github.xororz.localdream.data.ModelConfig
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.Executors
@@ -477,6 +481,59 @@ class BackendService : Service() {
             val nativeDir = applicationInfo.nativeLibraryDir
             val modelsDir = File(Model.getModelsDir(this), modelId)
 
+            // DreamLite/LiteRT is intentionally not routed through the legacy
+            // stable-diffusion/QNN executable. Recognizing a package is not the
+            // same as having an executable LiteRT backend. Fail closed until the
+            // dedicated Android runner is installed and validated.
+            if (backendType == DreamLiteLiteRt.RUNTIME) {
+                if (!DreamLiteLiteRt.isSupportedNpuDevice()) {
+                    val message = "DreamLite LiteRT NPU backend requires a supported Qualcomm SM8650+ device"
+                    Log.e(TAG, message)
+                    updateState(BackendState.Error(message, modelId))
+                    return false
+                }
+                val packageConfig = ModelConfig.read(modelsDir)
+                val probe = packageConfig?.let { DreamLiteLiteRt.probe(modelsDir, it) }
+                val validationError = when (probe) {
+                    is DreamLiteLiteRt.ProbeResult.Ready -> {
+                        val missingQnn = DreamLiteRuntimeFactory.missingQnnLibraries(runtimeDir)
+                        if (missingQnn.isNotEmpty()) {
+                            "DreamLite NPU runtime missing: ${missingQnn.joinToString()}"
+                        } else {
+                            when (val runtime = DreamLiteRuntimeFactory.create(probe.modelPackage)) {
+                                is DreamLiteRuntimeFactory.Result.Available -> {
+                                    val diagnostics = runtime.runtime.inspect()
+                                    runtime.runtime.close()
+                                    when (val abi = DreamLiteAbi.parse(probe.modelPackage.abiManifest)) {
+                                        is DreamLiteAbi.ParseResult.Invalid -> abi.reason
+                                        is DreamLiteAbi.ParseResult.Valid ->
+                                            DreamLiteRuntimeFactory.validateDiagnostics(
+                                                abi.manifest,
+                                                diagnostics,
+                                            )
+                                    }
+                                }
+                                is DreamLiteRuntimeFactory.Result.Unavailable -> runtime.reason
+                            }
+                        }
+                    }
+                    is DreamLiteLiteRt.ProbeResult.Invalid -> probe.reason
+                    null -> "DreamLite LiteRT config is missing or unreadable"
+                }
+                if (validationError != null) {
+                    Log.e(TAG, validationError)
+                    updateState(BackendState.Error(validationError, modelId))
+                    return false
+                }
+                if (!DitEngine.isInstalled(this)) {
+                    val message = "DreamLite Qwen conditioner requires the installed DiT engine"
+                    Log.e(TAG, message)
+                    updateState(BackendState.Error(message, modelId))
+                    return false
+                }
+                Log.i(TAG, "DreamLite package validated; starting conditioner-only native host")
+            }
+
             val executableFile = File(nativeDir, EXECUTABLE_NAME)
 
             if (!executableFile.exists()) {
@@ -491,11 +548,10 @@ class BackendService : Service() {
             // requirement changes instead of reusing a mismatched one.
             val listenOnAll = config.listenOnAll
 
-            val command = if (backendType == BACKEND_TYPE_UPSCALER) {
-                // Same invocation as the standalone upscale screen's private
-                // process; run through this service so host mode gets the
-                // usual reconcile/stop-grace lifecycle and --listen_all.
-                mutableListOf(
+            val dreamLite = backendType == DreamLiteLiteRt.RUNTIME
+            val ditEngineDir = if (isDitBackend(backendType) || dreamLite) DitEngine.dir(this) else null
+            val command = when {
+                backendType == BACKEND_TYPE_UPSCALER -> mutableListOf(
                     executableFile.absolutePath,
                     "--upscaler_mode",
                     "--lib_dir",
@@ -503,8 +559,17 @@ class BackendService : Service() {
                     "--port",
                     "8081",
                 )
-            } else {
-                mutableListOf(
+                dreamLite -> mutableListOf(
+                    executableFile.absolutePath,
+                    "--dreamlite_conditioner",
+                    "--model_dir",
+                    modelsDir.absolutePath,
+                    "--lib_dir",
+                    requireNotNull(ditEngineDir).absolutePath,
+                    "--port",
+                    "8081",
+                )
+                else -> mutableListOf(
                     executableFile.absolutePath,
                     "--type",
                     backendType,
@@ -514,27 +579,24 @@ class BackendService : Service() {
                     "8081",
                 )
             }
-            // DiT types load libdit_engine.so and its FastRPC skel from the
-            // native library directory they ship in, not the QNN runtime dir.
-            val ditEngineDir = if (isDitBackend(backendType)) DitEngine.dir(this) else null
+            // DiT and DreamLite conditioner modes load libdit_engine.so and its
+            // FastRPC skel from the APK native library directory.
             if (ditEngineDir != null) {
                 if (!DitEngine.isInstalled(this)) {
                     Log.e(TAG, "DiT engine missing at $ditEngineDir")
                     updateState(BackendState.Error(getString(R.string.dit_engine_missing)))
                     return false
                 }
-                command += listOf("--lib_dir", ditEngineDir.absolutePath)
-                // The DiT engine lives in nativeLibraryDir, while the shared
-                // /upscale endpoint needs the extracted QNN runtime. Keep the
-                // two paths explicit so generation and upscaling can coexist
-                // in the same backend process.
-                command += listOf("--qnn_lib_dir", runtimeDir.absolutePath)
+                if (!dreamLite) {
+                    command += listOf("--lib_dir", ditEngineDir.absolutePath)
+                    command += listOf("--qnn_lib_dir", runtimeDir.absolutePath)
+                }
             } else if (backendType != "sd15cpu" && backendType != "sdxlmnn" &&
                 backendType != BACKEND_TYPE_UPSCALER
             ) {
                 command += listOf("--lib_dir", runtimeDir.absolutePath)
             }
-            if (!useImg2img && backendType != BACKEND_TYPE_UPSCALER) {
+            if (!useImg2img && backendType != BACKEND_TYPE_UPSCALER && !dreamLite) {
                 command += "--no_img2img"
             }
             if (backendType == "sd15npu" && (width != 512 || height != 512)) {
@@ -562,9 +624,35 @@ class BackendService : Service() {
             if (File(modelsDir, "V_PRED").exists()) {
                 command += "--use_v_pred"
             }
+            // A packaged vision encoder can be brought up independently through
+            // /identity/embed. Do not enable it for CPU/MNN-only backends: the
+            // binary is a QNN context and needs the HTP runtime.
+            val packageConfig = ModelConfig.read(modelsDir)
+            val identityVision = packageConfig?.identityVisionEncoder?.let { File(modelsDir, it) }
+            val identityAdapter = packageConfig?.identityAdapter?.let { File(modelsDir, it) }
+            if (!dreamLite && (identityVision != null || identityAdapter != null)) {
+                if (identityVision?.isFile != true || identityAdapter?.isFile != true) {
+                    Log.w(TAG, "Identity adapter package incomplete; vision/adapter must both exist")
+                } else if (backendType == "sd15cpu" || backendType == "sdxlmnn" ||
+                    backendType == BACKEND_TYPE_UPSCALER
+                ) {
+                    Log.w(TAG, "Ignoring QNN identity adapter on non-QNN backend: $backendType")
+                } else {
+                    command += listOf(
+                        "--identity_vision", identityVision.absolutePath,
+                        "--identity_adapter", identityAdapter.absolutePath,
+                        "--identity_scale", (packageConfig.identityAdapterScale ?: 0.8f).toString(),
+                    )
+                    Log.i(
+                        TAG,
+                        "Identity package ready: vision=${identityVision.name}, " +
+                            "adapter=${identityAdapter.name}, scale=${packageConfig.identityAdapterScale ?: 0.8f}",
+                    )
+                }
+            }
             // The upscaler-mode process takes no safety-checker flag (same as
             // the standalone upscale screen's own invocation).
-            if (BuildConfig.FLAVOR == "filter" && backendType != BACKEND_TYPE_UPSCALER) {
+            if (BuildConfig.FLAVOR == "filter" && backendType != BACKEND_TYPE_UPSCALER && !dreamLite) {
                 command += listOf(
                     "--safety_checker",
                     File(filesDir, "safety_checker.mnn").absolutePath,

@@ -3,6 +3,7 @@ agp = "9.1.1"
 kotlin = "2.3.21"
 coreKtx = "1.16.0"
 junit = "4.13.2"
+json = "20250517"
 junitVersion = "1.2.1"
 espressoCore = "3.6.1"
 lifecycleRuntimeKtx = "2.9.1"
@@ -23,10 +24,12 @@ paging = "3.3.6"
 ksp = "2.3.8"
 ktlint-gradle = "14.2.0"
 detekt = "1.23.7"
+litert = "2.1.6"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
+json = { group = "org.json", name = "json", version.ref = "json" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycleRuntimeKtx" }
@@ -58,6 +61,7 @@ androidx-room-compiler = { group = "androidx.room", name = "room-compiler", vers
 androidx-paging-runtime = { group = "androidx.paging", name = "paging-runtime", version.ref = "paging" }
 androidx-paging-compose = { group = "androidx.paging", name = "paging-compose", version.ref = "paging" }
 detekt-formatting = { group = "io.gitlab.arturbosch.detekt", name = "detekt-formatting", version.ref = "detekt" }
+litert = { group = "com.google.ai.edge.litert", name = "litert-api", version.ref = "litert" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

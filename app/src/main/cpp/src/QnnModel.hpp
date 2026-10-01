@@ -303,6 +303,92 @@ class QnnModel : public QnnSampleApp {
     return returnStatus;
   }
 
+  // SD1.5 IP-Adapter UNet ABI. Unlike the legacy positional 3-input path,
+  // this binds every tensor by name so a mismatched compiled graph fails
+  // closed instead of silently feeding image tokens into the wrong input.
+  StatusCode executeUnetGraphsIpAdapter(float *latents, int timestep,
+                                        float *text_embedding,
+                                        float *ip_adapter_tokens,
+                                        float ip_adapter_scale,
+                                        float *latents_pred) {
+    if (!ensureIoTensors()) return StatusCode::FAILURE;
+    auto graphInfo = (*m_graphsInfo)[0];
+    if (graphInfo.numInputTensors != 5) {
+      QNN_ERROR("IP-Adapter UNet expects 5 inputs, got %u", graphInfo.numInputTensors);
+      return StatusCode::FAILURE;
+    }
+    float time = static_cast<float>(timestep);
+    bool sample_seen = false, time_seen = false, text_seen = false;
+    bool ip_seen = false, scale_seen = false;
+    for (uint32_t i = 0; i < graphInfo.numInputTensors; ++i) {
+      auto &input = inputs[i];
+      const std::string name = QNN_TENSOR_GET_NAME(input);
+      const float *source = nullptr;
+      if (name.find("ip_adapter_tokens") != std::string::npos) {
+        source = ip_adapter_tokens; ip_seen = true;
+      } else if (name.find("ip_adapter_scale") != std::string::npos) {
+        source = &ip_adapter_scale; scale_seen = true;
+      } else if (name.find("encoder_hidden_states") != std::string::npos) {
+        source = text_embedding; text_seen = true;
+      } else if (name.find("sample") != std::string::npos ||
+                 name.find("latent") != std::string::npos) {
+        source = latents; sample_seen = true;
+      } else if (name.find("timestamp") != std::string::npos ||
+                 name.find("timestep") != std::string::npos) {
+        source = &time; time_seen = true;
+      } else {
+        QNN_ERROR("Unknown IP-Adapter UNet input: %s", name.c_str());
+        return StatusCode::FAILURE;
+      }
+      if (m_ioTensor.copyFromFloatToNative(source, &input) !=
+          qnn::tools::iotensor::StatusCode::SUCCESS)
+        return StatusCode::FAILURE;
+    }
+    if (!(sample_seen && time_seen && text_seen && ip_seen && scale_seen)) {
+      QNN_ERROR("Incomplete IP-Adapter UNet tensor contract");
+      return StatusCode::FAILURE;
+    }
+    if (!runGraph(graphInfo, "sd15 ip-adapter unet")) return StatusCode::FAILURE;
+    if (m_ioTensor.convertToFloatInto(latents_pred, &outputs[0]) !=
+        qnn::tools::iotensor::StatusCode::SUCCESS)
+      return StatusCode::FAILURE;
+    return StatusCode::SUCCESS;
+  }
+
+  // Generic single-input vision/embedding graph execution. This deliberately
+  // lives below the diffusion-specific helpers so identity encoders can be
+  // benchmarked independently before an adapter-compatible UNet is enabled.
+  // Input/output element counts are validated against the compiled QNN graph;
+  // callers never get to guess tensor shapes.
+  StatusCode executeEmbeddingGraph(const float *input, size_t input_elems,
+                                   std::vector<float> &output) {
+    if (!input || !ensureIoTensors()) return StatusCode::FAILURE;
+    auto graphInfo = (*m_graphsInfo)[0];
+    if (graphInfo.numInputTensors != 1 || graphInfo.numOutputTensors != 1) {
+      QNN_ERROR("embedding graph expects 1 input/1 output, got %u/%u",
+                graphInfo.numInputTensors, graphInfo.numOutputTensors);
+      return StatusCode::FAILURE;
+    }
+    const size_t expected = tensorElems(inputs[0]);
+    if (expected != input_elems) {
+      QNN_ERROR("embedding input shape mismatch: graph=%zu caller=%zu",
+                expected, input_elems);
+      return StatusCode::FAILURE;
+    }
+    if (m_ioTensor.copyFromFloatToNative(input, &inputs[0]) !=
+        qnn::tools::iotensor::StatusCode::SUCCESS)
+      return StatusCode::FAILURE;
+    if (!runGraph(graphInfo, "identity vision encoder"))
+      return StatusCode::FAILURE;
+    output.resize(tensorElems(outputs[0]));
+    if (m_ioTensor.convertToFloatInto(output.data(), &outputs[0]) !=
+        qnn::tools::iotensor::StatusCode::SUCCESS) {
+      output.clear();
+      return StatusCode::FAILURE;
+    }
+    return StatusCode::SUCCESS;
+  }
+
   StatusCode executeVaeEncoderGraphs(float *pixel_values, float *mean,
                                      float *std) {
     auto returnStatus = StatusCode::SUCCESS;

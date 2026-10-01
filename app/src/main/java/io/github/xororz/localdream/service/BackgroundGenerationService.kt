@@ -13,6 +13,13 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.graphics.createBitmap
 import io.github.xororz.localdream.R
+import io.github.xororz.localdream.data.DreamLiteAbi
+import io.github.xororz.localdream.data.DreamLiteGeneration
+import io.github.xororz.localdream.data.DreamLiteLiteRt
+import io.github.xororz.localdream.data.DreamLiteRuntimeFactory
+import io.github.xororz.localdream.data.HttpDreamLiteConditioner
+import io.github.xororz.localdream.data.Model
+import io.github.xororz.localdream.data.ModelConfig
 import io.github.xororz.localdream.utils.Http
 import java.io.BufferedReader
 import java.io.File
@@ -138,6 +145,8 @@ class BackgroundGenerationService : Service() {
             return START_NOT_STICKY
         }
 
+        val modelId = intent.getStringExtra("model_id")
+        val backendType = intent.getStringExtra("backend_type")
         val negativePrompt = intent.getStringExtra("negative_prompt") ?: ""
         val steps = intent.getIntExtra("steps", 28)
         val cfg = intent.getFloatExtra("cfg", 7f)
@@ -229,30 +238,176 @@ class BackgroundGenerationService : Service() {
 
         serviceScope.launch {
             Log.d("GenerationService", "start generation")
-            runGeneration(
-                prompt,
-                negativePrompt,
-                steps,
-                cfg,
-                seed,
-                width,
-                height,
-                effectiveWidth,
-                effectiveHeight,
-                image,
-                mask,
-                referenceImages,
-                denoiseStrength,
-                useOpenCL,
-                scheduler,
-                aspectRatio,
-                ultrafix,
-                ultrafixTileSize,
-                backendHost,
-            )
+            if (backendType == DreamLiteLiteRt.RUNTIME && backendHost == LOCAL_BACKEND_HOST) {
+                runDreamLiteGeneration(
+                    modelId = requireNotNull(modelId) { "DreamLite generation requires model_id" },
+                    prompt = prompt,
+                    seed = seed,
+                    width = width,
+                    height = height,
+                    referenceImages = referenceImages,
+                )
+            } else {
+                runGeneration(
+                    prompt,
+                    negativePrompt,
+                    steps,
+                    cfg,
+                    seed,
+                    width,
+                    height,
+                    effectiveWidth,
+                    effectiveHeight,
+                    image,
+                    mask,
+                    referenceImages,
+                    denoiseStrength,
+                    useOpenCL,
+                    scheduler,
+                    aspectRatio,
+                    ultrafix,
+                    ultrafixTileSize,
+                    backendHost,
+                )
+            }
         }
 
         return START_NOT_STICKY
+    }
+
+    private suspend fun runDreamLiteGeneration(
+        modelId: String,
+        prompt: String,
+        seed: Long?,
+        width: Int,
+        height: Int,
+        referenceImages: JSONArray?,
+    ) = withContext(Dispatchers.IO) {
+        try {
+            updateState(GenerationState.Progress(0f))
+            require(width == 1024 && height == 1024) {
+                "DreamLite Mobile v1 requires 1024x1024 output"
+            }
+
+            val modelDir = File(Model.getModelsDir(applicationContext), modelId)
+            val config = ModelConfig.read(modelDir)
+                ?: error("DreamLite config is missing or unreadable")
+            val modelPackage = when (val probe = DreamLiteLiteRt.probe(modelDir, config)) {
+                is DreamLiteLiteRt.ProbeResult.Ready -> probe.modelPackage
+                is DreamLiteLiteRt.ProbeResult.Invalid -> error(probe.reason)
+            }
+            val manifest = when (val parsed = DreamLiteAbi.parse(modelPackage.abiManifest)) {
+                is DreamLiteAbi.ParseResult.Valid -> parsed.manifest
+                is DreamLiteAbi.ParseResult.Invalid -> error(parsed.reason)
+            }
+            val runtime = when (val created = DreamLiteRuntimeFactory.create(modelPackage)) {
+                is DreamLiteRuntimeFactory.Result.Available -> created.runtime
+                is DreamLiteRuntimeFactory.Result.Unavailable -> error(created.reason)
+            }
+
+            val reference = decodeDreamLiteReference(referenceImages)
+            val actualSeed = seed ?: System.nanoTime()
+            val conditioner = HttpDreamLiteConditioner()
+            val image = try {
+                DreamLiteGeneration.run(
+                    runtime = runtime,
+                    manifest = manifest,
+                    request = DreamLiteGeneration.Request(
+                        prompt = prompt,
+                        width = width,
+                        height = height,
+                        seed = actualSeed,
+                        referenceRgb = reference,
+                        referenceWidth = if (reference != null) 1024 else 0,
+                        referenceHeight = if (reference != null) 1024 else 0,
+                    ),
+                    conditioner = conditioner,
+                )
+            } finally {
+                conditioner.close()
+                runtime.close()
+            }
+
+            if (cancelRequested) {
+                updateState(GenerationState.Idle)
+                stopSelf()
+                return@withContext
+            }
+
+            val bitmap = dreamLiteTensorToBitmap(image, width, height)
+            updateState(GenerationState.Complete(bitmap, actualSeed))
+            val consumed = withTimeoutOrNull(5000L) { _bitmapConsumed.first { it } }
+            if (consumed == null) {
+                Log.w("GenerationService", "Timeout waiting for DreamLite bitmap consumption")
+            }
+            stopSelf()
+        } catch (e: Exception) {
+            if (cancelRequested) {
+                Log.d("GenerationService", "DreamLite generation cancelled")
+                updateState(GenerationState.Idle)
+            } else {
+                Log.e("GenerationService", "DreamLite generation error", e)
+                updateState(
+                    GenerationState.Error(
+                        e.message ?: this@BackgroundGenerationService.getString(R.string.unknown_error),
+                    ),
+                )
+            }
+            stopSelf()
+        }
+    }
+
+    private fun decodeDreamLiteReference(referenceImages: JSONArray?): ByteArray? {
+        if (referenceImages == null || referenceImages.length() == 0) return null
+        require(referenceImages.length() == 1) {
+            "DreamLite Mobile v1 supports exactly one identity reference"
+        }
+        val encoded = referenceImages.getString(0)
+        val bytes = Base64.getDecoder().decode(encoded)
+        val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            ?: error("Failed to decode DreamLite identity reference")
+        val normalized = if (decoded.width == 1024 && decoded.height == 1024) {
+            decoded
+        } else {
+            Bitmap.createScaledBitmap(decoded, 1024, 1024, true).also {
+                if (it !== decoded) decoded.recycle()
+            }
+        }
+        return bitmapToPackedRgb(normalized).also { normalized.recycle() }
+    }
+
+    private fun bitmapToPackedRgb(bitmap: Bitmap): ByteArray {
+        val count = bitmap.width * bitmap.height
+        val pixels = IntArray(count)
+        bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+        return ByteArray(count * 3).also { out ->
+            for (i in pixels.indices) {
+                val p = pixels[i]
+                val o = i * 3
+                out[o] = ((p shr 16) and 0xff).toByte()
+                out[o + 1] = ((p shr 8) and 0xff).toByte()
+                out[o + 2] = (p and 0xff).toByte()
+            }
+        }
+    }
+
+    private fun dreamLiteTensorToBitmap(image: FloatArray, width: Int, height: Int): Bitmap {
+        val plane = width * height
+        require(image.size == plane * 3) {
+            "DreamLite VAE output size mismatch: ${image.size}, expected ${plane * 3}"
+        }
+        val pixels = IntArray(plane)
+        fun channel(value: Float): Int =
+            ((value.coerceIn(-1f, 1f) + 1f) * 127.5f).toInt().coerceIn(0, 255)
+        for (i in 0 until plane) {
+            val r = channel(image[i])
+            val g = channel(image[plane + i])
+            val b = channel(image[2 * plane + i])
+            pixels[i] = (0xff shl 24) or (r shl 16) or (g shl 8) or b
+        }
+        return createBitmap(width, height).also {
+            it.setPixels(pixels, 0, width, 0, 0, width, height)
+        }
     }
 
     @Suppress("LongParameterList")

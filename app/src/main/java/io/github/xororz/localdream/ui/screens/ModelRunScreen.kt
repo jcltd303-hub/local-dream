@@ -247,8 +247,13 @@ fun ModelRunScreen(
     } else {
         remember(modelRepository.models) { modelRepository.models.find { it.id == modelId } }
     }
-    val supportsReferenceEditing = model?.ditKind == "klein" ||
-        model?.ditKind == "qwen21"
+    val supportsReferenceEditing = model?.supportsNativeReferenceEditing == true
+    val supportsIdentityReference = model?.supportsIdentityReference == true
+    val supportsReferenceInputs = supportsReferenceEditing || supportsIdentityReference
+    val externalIdentityReady = model?.hasUsableExternalIdentityAdapter(context) == true
+    var identityAdapterScale by remember(modelId) {
+        mutableFloatStateOf(model?.configDefaults?.identityAdapterScale ?: 0.8f)
+    }
     LaunchedEffect(Unit) {
         if (!isRemote) {
             modelRepository.ensureLoaded()
@@ -708,8 +713,11 @@ fun ModelRunScreen(
     promptField.onTextCommitted = { saveAllFields() }
     negativePromptField.onTextCommitted = { saveAllFields() }
 
-    PromptTokenCountEffect(promptField, backendReady = backendReady, backendHost = backendHost)
-    PromptTokenCountEffect(negativePromptField, backendReady = backendReady, backendHost = backendHost)
+    // DreamLite's local backend process is conditioner-only and intentionally
+    // does not expose /tokenize. Its Qwen prompt template is applied natively.
+    val tokenCountReady = backendReady && model?.isDreamLiteLiteRt != true
+    PromptTokenCountEffect(promptField, backendReady = tokenCountReady, backendHost = backendHost)
+    PromptTokenCountEffect(negativePromptField, backendReady = tokenCountReady, backendHost = backendHost)
 
     val onBatchCountsChange = remember {
         { value: Float ->
@@ -1055,7 +1063,8 @@ fun ModelRunScreen(
     // lengthens the DiT sequence, and how many fit is left to the user.
     fun processEditReferences(uris: List<Uri>) {
         val existing = editReferenceImages.map { it.uri }.toSet()
-        val selected = uris.distinct().filterNot { it in existing }
+        val fresh = uris.distinct().filterNot { it in existing }
+        val selected = if (supportsIdentityReference && !supportsReferenceEditing) fresh.take(1) else fresh
         if (selected.isEmpty() || editReferencesLoading) return
         scope.launch {
             editReferencesLoading = true
@@ -1085,6 +1094,7 @@ fun ModelRunScreen(
                         )
                     }
                 }
+                if (supportsIdentityReference && !supportsReferenceEditing) editReferenceImages.clear()
                 editReferenceImages.addAll(decoded)
             } catch (e: Exception) {
                 Toast.makeText(
@@ -1417,6 +1427,7 @@ fun ModelRunScreen(
             aspectRatio = if (useImg2img) prefs.aspectRatio else "1:1"
 
             currentWidth = when {
+                model.isDreamLiteLiteRt -> 1024
                 model.usesFixedCanvas -> 1024
 
                 prefs.width == -1 -> defaultGenerationSize(
@@ -1428,6 +1439,7 @@ fun ModelRunScreen(
                 else -> if (model.isDit) snapDitSize(prefs.width.toFloat()) else prefs.width
             }
             currentHeight = when {
+                model.isDreamLiteLiteRt -> 1024
                 model.usesFixedCanvas -> 1024
 
                 prefs.height == -1 -> defaultGenerationSize(
@@ -1573,7 +1585,7 @@ fun ModelRunScreen(
                     val currentGenerationMode = when {
                         wasUltrafix -> GenerationMode.ULTRAFIX
 
-                        supportsReferenceEditing && (selectedImageUri != null || editReferenceImages.isNotEmpty()) ->
+                        supportsReferenceInputs && (selectedImageUri != null || editReferenceImages.isNotEmpty()) ->
                             GenerationMode.EDIT
 
                         isInpaintMode -> GenerationMode.INPAINT
@@ -1952,17 +1964,17 @@ fun ModelRunScreen(
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                if (useImg2img) {
+                                if (useImg2img || supportsIdentityReference) {
                                     // Native edit models take a base image and any number of
                                     // references through one entry; a menu picks
                                     // which one to add.
                                     Box {
                                         TextButton(
                                             onClick = {
-                                                if (supportsReferenceEditing) {
-                                                    showReferenceEditMenu = true
-                                                } else {
-                                                    onSelectImageClick()
+                                                when {
+                                                    supportsReferenceEditing -> showReferenceEditMenu = true
+                                                    supportsIdentityReference -> onAddEditReferencesClick()
+                                                    else -> onSelectImageClick()
                                                 }
                                             },
                                             contentPadding = PaddingValues(
@@ -1971,10 +1983,10 @@ fun ModelRunScreen(
                                             ),
                                         ) {
                                             Text(
-                                                if (supportsReferenceEditing) {
-                                                    stringResource(R.string.flux_edit)
-                                                } else {
-                                                    "img2img"
+                                                when {
+                                                    supportsReferenceEditing -> stringResource(R.string.flux_edit)
+                                                    supportsIdentityReference -> "Identity Reference"
+                                                    else -> "img2img"
                                                 },
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 modifier = Modifier.padding(end = 4.dp),
@@ -2041,6 +2053,7 @@ fun ModelRunScreen(
                                 AdvancedSettingsDialog(
                                     isSdxl = model?.usesFixedCanvas == true,
                                     isDit = model?.isDit == true,
+                                    isDreamLite = model?.isDreamLiteLiteRt == true,
                                     onDitWidthChange = onDitWidthChange,
                                     onDitHeightChange = onDitHeightChange,
                                     runOnCpu = model?.runOnCpu ?: false,
@@ -2124,7 +2137,7 @@ fun ModelRunScreen(
                                     },
                                     onShare = {
                                         val currentMode = when {
-                                            supportsReferenceEditing && (selectedImageUri != null || editReferenceImages.isNotEmpty()) ->
+                                            supportsReferenceInputs && (selectedImageUri != null || editReferenceImages.isNotEmpty()) ->
                                                 GenerationMode.EDIT
 
                                             isInpaintMode -> GenerationMode.INPAINT
@@ -2223,7 +2236,7 @@ fun ModelRunScreen(
                                     // also closes races with rapid thumbnail
                                     // removals rewriting the scratch file.
                                     val editReferencePayloads =
-                                        if (supportsReferenceEditing) {
+                                        if (supportsReferenceInputs) {
                                             editReferenceImages.map { it.base64 }
                                         } else {
                                             emptyList()
@@ -2264,6 +2277,8 @@ fun ModelRunScreen(
                                             context,
                                             BackgroundGenerationService::class.java,
                                         ).apply {
+                                            putExtra("model_id", modelId)
+                                            putExtra("backend_type", model?.backendType)
                                             putExtra("prompt", promptField.text)
                                             putExtra(
                                                 "negative_prompt",
@@ -2676,10 +2691,9 @@ fun ModelRunScreen(
                             }
                         }
 
-                        if (supportsReferenceEditing) {
-                            // The base image is always reference 1, so the
-                            // user's references are numbered after it.
-                            val firstNumber = if (selectedImageUri != null) 2 else 1
+                        if (supportsReferenceInputs) {
+                            // Native edit models may also have a base image; DreamLite v1 uses one identity reference.
+                            val firstNumber = if (supportsReferenceEditing && selectedImageUri != null) 2 else 1
                             editReferenceImages.forEachIndexed { index, reference ->
                                 if (index > 0 || selectedImageUri != null) {
                                     Spacer(modifier = Modifier.width(8.dp))

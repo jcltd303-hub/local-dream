@@ -1,0 +1,58 @@
+name: Android Identity Build
+
+on:
+  push:
+    branches: [master, feat/identity-reference, feat/autonomous-asset-runner]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - name: Initialize required native submodules
+        run: |
+          git submodule update --init --depth 1 \
+            app/src/main/cpp/3rdparty/cpp-httplib \
+            app/src/main/cpp/3rdparty/json \
+            app/src/main/cpp/3rdparty/stb \
+            app/src/main/cpp/3rdparty/xtensor \
+            app/src/main/cpp/3rdparty/xtl \
+            app/src/main/cpp/3rdparty/MNN \
+            app/src/main/cpp/3rdparty/xsimd \
+            app/src/main/cpp/3rdparty/zstd \
+            app/src/main/cpp/3rdparty/xtensor-blas \
+            app/src/main/cpp/3rdparty/tokenizers-cpp \
+            app/src/main/cpp/3rdparty/stable-diffusion.cpp
+      - name: Validate stable-diffusion.cpp patch
+        run: git -C app/src/main/cpp/3rdparty/stable-diffusion.cpp apply --check ../../dit/stable-diffusion.cpp.patch
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      - name: Install conversion test dependency
+        run: python -m pip install pytest numpy
+      - name: Test DreamLite conversion tooling
+        run: python -m pytest -q tools/dreamlite_litert/test_emit_abi.py tools/dreamlite_litert/test_validate_metadata.py tools/dreamlite_litert/test_export_contract.py tools/dreamlite_litert/test_parity.py tools/dreamlite_litert/test_build_package.py
+      - name: Compile Kotlin
+        run: ./gradlew compileBasicDebugKotlin
+      - name: Unit tests
+        run: ./gradlew testBasicDebugUnitTest
+      # Full APK packaging invokes CMake and requires Qualcomm QNN SDK.
+      # Generic hosted runners validate Kotlin/tests without proprietary SDK assets.
+      - name: Build basic debug APK
+        if: env.QNN_SDK_ROOT != ''
+        run: ./gradlew assembleBasicDebug
+      - name: Upload APK
+        if: env.QNN_SDK_ROOT != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-dream-identity-basic-debug
+          path: app/build/outputs/apk/basic/debug/*.apk
+          if-no-files-found: error

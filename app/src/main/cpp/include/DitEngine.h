@@ -21,12 +21,13 @@
 extern "C" {
 #endif
 
-#define DIT_ENGINE_ABI_VERSION 5
+#define DIT_ENGINE_ABI_VERSION 6
 
 // Name of the single symbol the core resolves after dlopen.
 #define DIT_ENGINE_ENTRY_SYMBOL "dit_engine_get_api"
 
 typedef struct dit_ctx dit_ctx;
+typedef struct dit_condition_ctx dit_condition_ctx;
 
 typedef enum {
   DIT_MODEL_Z_IMAGE = 0,
@@ -101,10 +102,33 @@ typedef void (*dit_preview_cb)(int step, const uint8_t *rgb, int width,
 typedef void (*dit_log_cb)(int level, const char *text, void *user_data);
 
 typedef struct {
+  const char *prompt;
+  const uint8_t *reference_image_rgb;
+  int reference_width;
+  int reference_height;
+  // Reserved for ABI stability. stable-diffusion.cpp returns post-template
+  // hidden states already; callers must leave this at zero.
+  int reserved_drop_prefix_tokens;
+} dit_condition_params;
+
+typedef struct {
+  float *hidden_states;
+  float *attention_mask;
+  int sequence_length;
+  int hidden_size;
+} dit_condition_output;
+
+typedef struct {
   int abi_version;
 
   // Returns NULL on failure; the reason is available from last_error(NULL).
   dit_ctx *(*create)(const dit_ctx_params *params);
+  dit_condition_ctx *(*create_conditioner)(const char *llm_path,
+                                            const char *llm_vision_path,
+                                            const char *backend,
+                                            const char *params_backend,
+                                            int n_threads);
+  void (*destroy_conditioner)(dit_condition_ctx *ctx);
   void (*destroy)(dit_ctx *ctx);
 
   // Writes an interleaved RGB8/RGBA8 image into *out_pixels and its channel
@@ -116,9 +140,19 @@ typedef struct {
                    int *out_height, int *out_channels);
   void (*free_image)(uint8_t *pixels);
 
+  // Standalone multimodal conditioning for runtimes such as DreamLite that
+  // reuse the engine's Qwen-family LLM/VLM but own their diffusion loop.
+  bool (*condition)(dit_ctx *ctx, const dit_condition_params *params,
+                    dit_condition_output *out);
+  bool (*condition_standalone)(dit_condition_ctx *ctx,
+                               const dit_condition_params *params,
+                               dit_condition_output *out);
+  void (*free_condition)(dit_condition_output *out);
+
   // Last failure on this context, or the last create() failure when ctx is
   // NULL. Valid until the next call on the same context.
   const char *(*last_error)(const dit_ctx *ctx);
+  const char *(*condition_last_error)(const dit_condition_ctx *ctx);
 
   void (*set_log_callback)(dit_log_cb cb, void *user_data);
 
