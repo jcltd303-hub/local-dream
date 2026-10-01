@@ -54,6 +54,7 @@ import kotlin.math.roundToInt
 internal fun AdvancedSettingsDialog(
     isSdxl: Boolean,
     isDit: Boolean = false,
+    isDreamLite: Boolean = false,
     runOnCpu: Boolean,
     useImg2img: Boolean,
     isRunning: Boolean,
@@ -209,7 +210,7 @@ internal fun AdvancedSettingsDialog(
                         )
                     }
                 }
-                if (!runOnCpu && !isSdxl && !isDit && availableResolutions.isNotEmpty()) {
+                if (!runOnCpu && !isSdxl && !isDit && !isDreamLite && availableResolutions.isNotEmpty()) {
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Text(
                             stringResource(R.string.resolution),
@@ -248,6 +249,7 @@ internal fun AdvancedSettingsDialog(
                     }
                 }
 
+                if (!isDreamLite) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     // Split scheduler id into base + Karras flag so the UI
                     // can offer one base chip per family plus a single
@@ -355,11 +357,12 @@ internal fun AdvancedSettingsDialog(
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
+                }
                 // The free 128-512 slider belongs to SD1.5 CPU. SDXL MNN also runs
                 // on CPU/GPU but renders on the fixed 1024 canvas like every other
                 // SDXL package, so it must not be offered a range it cannot use.
                 // The runtime picker below stays for both.
-                if (runOnCpu && !isSdxl) {
+                if (runOnCpu && !isSdxl && !isDreamLite) {
                     Column {
                         Text(
                             stringResource(
