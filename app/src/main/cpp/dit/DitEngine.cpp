@@ -5,6 +5,7 @@
 // objects. See include/DitEngine.h for the contract.
 
 #include "DitEngine.h"
+#include "DreamLiteConditionBridge.hpp"
 
 #include <algorithm>
 #include <cstdlib>
@@ -316,6 +317,47 @@ bool engine_generate(dit_ctx *ctx, const dit_gen_params *params, dit_progress_cb
 
 void engine_free_image(uint8_t *pixels) { free(pixels); }
 
+bool engine_condition(dit_ctx *ctx, const dit_condition_params *params,
+                      dit_condition_output *out) {
+  if (!ctx || !ctx->sd || !params || !out) return false;
+  *out = {};
+  DreamLiteConditionResult result;
+  std::string error;
+  if (!DreamLiteConditionBridge::encode(
+          ctx->sd, params->prompt ? params->prompt : "",
+          params->reference_image_rgb, params->reference_width,
+          params->reference_height, &result, &error)) {
+    ctx->last_error = error;
+    return false;
+  }
+  const size_t hidden_count = result.hidden_states.size();
+  out->hidden_states =
+      static_cast<float *>(malloc(hidden_count * sizeof(float)));
+  out->attention_mask = static_cast<float *>(
+      malloc(result.attention_mask.size() * sizeof(float)));
+  if (!out->hidden_states || !out->attention_mask) {
+    free(out->hidden_states);
+    free(out->attention_mask);
+    *out = {};
+    ctx->last_error = "conditioning output allocation failed";
+    return false;
+  }
+  std::memcpy(out->hidden_states, result.hidden_states.data(),
+              hidden_count * sizeof(float));
+  std::memcpy(out->attention_mask, result.attention_mask.data(),
+              result.attention_mask.size() * sizeof(float));
+  out->sequence_length = result.sequence_length;
+  out->hidden_size = result.hidden_size;
+  return true;
+}
+
+void engine_free_condition(dit_condition_output *out) {
+  if (!out) return;
+  free(out->hidden_states);
+  free(out->attention_mask);
+  *out = {};
+}
+
 const char *engine_last_error(const dit_ctx *ctx) {
   if (!ctx) return g_create_error.c_str();
   return ctx->last_error.c_str();
@@ -337,6 +379,8 @@ const dit_engine_api g_api = {
     engine_destroy,
     engine_generate,
     engine_free_image,
+    engine_condition,
+    engine_free_condition,
     engine_last_error,
     engine_set_log_callback,
     engine_set_preview_interval,
