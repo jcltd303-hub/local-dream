@@ -75,7 +75,8 @@ android {
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
         debug {
-            signingConfig = signingConfigs.getByName("release")
+            // Use the Android Gradle Plugin's generated debug keystore.
+            // Release credentials are not required for CI/debug APKs.
         }
     }
     compileOptions {
