@@ -137,6 +137,22 @@ class DreamLiteOrchestratorTest {
     }
 
     @Test
+    fun scheduledStepUpdatesLatentAfterModelOutput() {
+        val state = DreamLiteOrchestrator.PipelineState(
+            linkedMapOf(
+                DreamLiteOrchestrator.LATENT_STATE_KEY to floatArrayOf(10f),
+                DreamLiteOrchestrator.MODEL_OUTPUT_STATE_KEY to floatArrayOf(4f),
+            )
+        )
+        DreamLiteOrchestrator.executeScheduledStep(state, 1f, 0.5f)
+        assertEquals(
+            8f,
+            state.tensors.getValue(DreamLiteOrchestrator.LATENT_STATE_KEY)[0],
+            1e-6f,
+        )
+    }
+
+    @Test
     fun editEncodesReferenceBeforeDenoising() {
         val plan = DreamLiteOrchestrator.plan(true)
         assertTrue(plan.hasReferenceImage)
