@@ -169,7 +169,8 @@ data class Model(
     }
 
     val supportsIdentityReference: Boolean
-        get() = supportsNativeReferenceEditing || supportsExternalIdentityAdapter || isDreamLiteLiteRt
+        get() = supportsNativeReferenceEditing || supportsExternalIdentityAdapter ||
+            (isDreamLiteLiteRt && configDefaults.dreamliteMultimodalConditioning == true)
 
     // Per-field priority: code defaults > config.json > global defaults.
     val defaults: GenerationDefaults
