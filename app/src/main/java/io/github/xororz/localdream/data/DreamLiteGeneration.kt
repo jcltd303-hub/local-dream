@@ -1,5 +1,9 @@
 package io.github.xororz.localdream.data
 
+import kotlin.math.ln
+import kotlin.math.sqrt
+import kotlin.math.cos
+import kotlin.math.PI
 import kotlin.random.Random
 
 /** Pure orchestration entry point used by the Android service and host tests. */
@@ -14,6 +18,29 @@ object DreamLiteGeneration {
         val referenceHeight: Int = 0,
     )
 
+    internal fun gaussianNoise(size: Int, seed: Long): FloatArray {
+        require(size >= 0)
+        val random = Random(seed)
+        val out = FloatArray(size)
+        var index = 0
+        while (index < size) {
+            // Box-Muller transform: DreamLite's reference pipeline initializes
+            // latents with randn_tensor, so the Android path must also be N(0,1)
+            // rather than uniform noise. Kotlin's RNG is intentionally local;
+            // seed determinism is stable inside this backend, not bit-identical
+            // to PyTorch's generator.
+            val u1 = random.nextDouble().coerceAtLeast(Double.MIN_VALUE)
+            val u2 = random.nextDouble()
+            val radius = sqrt(-2.0 * ln(u1))
+            val angle = 2.0 * PI * u2
+            out[index++] = (radius * cos(angle)).toFloat()
+            if (index < size) {
+                out[index++] = (radius * kotlin.math.sin(angle)).toFloat()
+            }
+        }
+        return out
+    }
+
     fun run(
         runtime: DreamLiteRuntime,
         manifest: DreamLiteAbi.Manifest,
@@ -27,12 +54,10 @@ object DreamLiteGeneration {
             height = request.height / 8,
             width = request.width / 8,
         )
-        val random = Random(request.seed)
-        val latent = FloatArray(shape.batch * shape.channels * shape.height * shape.width) {
-            // Deterministic centered noise for the runtime boundary. Device parity
-            // tests compare this seed path against the converted reference.
-            random.nextFloat() * 2f - 1f
-        }
+        val latent = gaussianNoise(
+            shape.batch * shape.channels * shape.height * shape.width,
+            request.seed,
+        )
         val state = DreamLiteOrchestrator.PipelineState(
             linkedMapOf(DreamLiteOrchestrator.LATENT_STATE_KEY to latent)
         )
