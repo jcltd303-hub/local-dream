@@ -258,7 +258,7 @@ diff --git a/src/pipeline/diffusion_engine.h b/src/pipeline/diffusion_engine.h
 diff --git a/src/pipeline/diffusion_engine.cpp b/src/pipeline/diffusion_engine.cpp
 --- a/src/pipeline/diffusion_engine.cpp
 +++ b/src/pipeline/diffusion_engine.cpp
-@@ -922,11 +922,42 @@
+@@ -922,11 +922,44 @@
          eager_load = false;
      }
  
