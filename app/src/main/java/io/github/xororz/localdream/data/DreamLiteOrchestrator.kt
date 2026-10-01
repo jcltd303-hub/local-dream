@@ -92,7 +92,7 @@ object DreamLiteOrchestrator {
     ): PipelineState {
         val scheduler = requireNotNull(manifest.scheduler) {
             "DreamLite scheduler config is required"
-        }.toRuntimeConfig()
+        }
         val sigmas = DreamLiteScheduler.schedule(imageSeqLen, scheduler)
         return executeRuntime(
             plan,
