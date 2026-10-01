@@ -58,7 +58,7 @@ object DreamLiteLiteRt {
             return ProbeResult.Invalid("config does not declare $RUNTIME")
         }
 
-        fun component(name: String, value: String?): File? {
+        fun component(value: String?): File? {
             if (value.isNullOrBlank()) return null
             val file = File(modelDir, value)
             val root = runCatching { modelDir.canonicalFile }.getOrNull()
@@ -70,15 +70,15 @@ object DreamLiteLiteRt {
             return canonical.takeIf { it.isFile && it.length() > 0L }
         }
 
-        val unet = component("unet", config.dreamliteUnet)
+        val unet = component(config.dreamliteUnet)
             ?: return ProbeResult.Invalid("missing or invalid DreamLite U-Net")
-        val vaeEncoder = component("vae encoder", config.dreamliteVaeEncoder)
+        val vaeEncoder = component(config.dreamliteVaeEncoder)
             ?: return ProbeResult.Invalid("missing or invalid DreamLite VAE encoder")
-        val vaeDecoder = component("vae decoder", config.dreamliteVaeDecoder)
+        val vaeDecoder = component(config.dreamliteVaeDecoder)
             ?: return ProbeResult.Invalid("missing or invalid DreamLite VAE decoder")
-        val textEncoder = component("text encoder", config.dreamliteTextEncoder)
+        val textEncoder = component(config.dreamliteTextEncoder)
             ?: return ProbeResult.Invalid("missing or invalid DreamLite text encoder")
-        val abiManifest = component("ABI manifest", DreamLiteAbi.MANIFEST)
+        val abiManifest = component(DreamLiteAbi.MANIFEST)
             ?: return ProbeResult.Invalid("missing or invalid ${DreamLiteAbi.MANIFEST}")
         when (val abi = DreamLiteAbi.parse(abiManifest)) {
             is DreamLiteAbi.ParseResult.Invalid -> return ProbeResult.Invalid(abi.reason)
