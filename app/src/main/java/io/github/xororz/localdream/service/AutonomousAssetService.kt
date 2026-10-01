@@ -10,7 +10,7 @@ import android.graphics.Bitmap
 import android.os.Environment
 import android.os.IBinder
 import android.util.Log
-import androidx.core.app.ContextCompat
+import androidx.core.content.ContextCompat
 import androidx.core.app.NotificationCompat
 import io.github.xororz.localdream.R
 import io.github.xororz.localdream.data.AutonomousAssetPlan
