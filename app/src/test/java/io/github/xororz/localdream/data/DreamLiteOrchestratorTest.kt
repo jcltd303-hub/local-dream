@@ -286,7 +286,8 @@ class DreamLiteOrchestratorTest {
                         calls += component
                         assertEquals(2048, inputs.getValue("conditioning").size)
                         assertEquals(7f, inputs.getValue("conditioning")[0], 0f)
-                        assertArrayEquals(floatArrayOf(1f), inputs.getValue("mask"), 0f)
+                        assertEquals(1, inputs.getValue("mask").size)
+                        assertEquals(1f, inputs.getValue("mask")[0], 0f)
                         mapOf("noise" to floatArrayOf(0f))
                     }
                     "vae_decoder" -> mapOf("image" to inputs.getValue("latent"))
