@@ -7,7 +7,7 @@ It does not guess model constants.
 import argparse, json
 from pathlib import Path
 
-REQUIRED = ("unet", "vae_encoder", "vae_decoder", "text_encoder")
+CORE = ("unet", "vae_encoder", "vae_decoder")
 
 def tensor(name, dtype, shape, state_key):
     if not name or not dtype or not shape or any(int(x) == 0 or int(x) < -1 for x in shape):
@@ -19,11 +19,13 @@ def main():
     p.add_argument("--metadata", required=True, help="JSON produced by converted-model inspection")
     p.add_argument("--checkpoint-config", required=True, help="JSON containing scheduler and VAE source config")
     p.add_argument("--output", required=True)
+    p.add_argument("--conditioning-backend", choices=("litert_text","qwen3_vl_gguf"), default="litert_text")
     a=p.parse_args()
     meta=json.loads(Path(a.metadata).read_text())
     cfg=json.loads(Path(a.checkpoint_config).read_text())
     components={}
-    for name in REQUIRED:
+    required=CORE + (() if a.conditioning_backend=="qwen3_vl_gguf" else ("text_encoder",))
+    for name in required:
         src=meta["components"][name]
         components[name]={
             "inputs":[tensor(t["name"],t["dtype"],t["shape"],t["state_key"]) for t in src["inputs"]],
@@ -39,6 +41,7 @@ def main():
         raise ValueError("missing VAE scaling_factor")
     vae.setdefault("shift_factor",0.0)
     out={"abi_version":1,"runtime":"dreamlite_litert","steps":4,
+         "conditioning_backend":a.conditioning_backend,
          "scheduler":{k:scheduler[k] for k in required_scheduler},
          "vae":{"scaling_factor":vae["scaling_factor"],"shift_factor":vae["shift_factor"]},
          "components":components}
