@@ -2,6 +2,7 @@ package io.github.xororz.localdream.data
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class AutonomousAssetPlanTest {
@@ -40,5 +41,37 @@ class AutonomousAssetPlanTest {
         assertEquals("asset-2", plan.jobs[1].id)
         assertNull(plan.jobs[1].seed)
         assertEquals(1024, plan.jobs[1].width)
+    }
+    @Test
+    fun rejectsDuplicateJobIds() {
+        assertThrows(IllegalArgumentException::class.java) {
+            AutonomousAssetPlan.parse(
+                """
+                {
+                  "model_id": "dreamlite-mobile",
+                  "jobs": [
+                    {"id":"same","prompt":"one"},
+                    {"id":"same","prompt":"two"}
+                  ]
+                }
+                """.trimIndent()
+            )
+        }
+    }
+
+    @Test
+    fun rejectsInvalidDimensions() {
+        assertThrows(IllegalArgumentException::class.java) {
+            AutonomousAssetPlan.parse(
+                """
+                {
+                  "model_id": "dreamlite-mobile",
+                  "jobs": [
+                    {"id":"bad","prompt":"one","width":32,"height":1024}
+                  ]
+                }
+                """.trimIndent()
+            )
+        }
     }
 }
