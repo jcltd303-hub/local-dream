@@ -199,12 +199,20 @@ class DreamLiteOrchestratorTest {
         val state = DreamLiteOrchestrator.PipelineState(
             linkedMapOf("prompt" to floatArrayOf(1f), "latent" to floatArrayOf(10f))
         )
-        DreamLiteOrchestrator.executeScheduledRuntime(
+        val sigmas = DreamLiteScheduler.schedule(256, manifest.scheduler!!)
+        DreamLiteOrchestrator.executeRuntime(
             DreamLiteOrchestrator.plan(false),
             runtime,
             manifest,
             state,
-            imageSeqLen = 256,
+            beforeDenoise = { step, pipeline ->
+                val sigma = sigmas[step]
+                pipeline.tensors[DreamLiteOrchestrator.TIMESTEP_STATE_KEY] =
+                    floatArrayOf(DreamLiteScheduler.timestep(sigma, manifest.scheduler!!))
+            },
+            afterDenoise = { step, pipeline ->
+                DreamLiteOrchestrator.executeScheduledStep(pipeline, sigmas[step], sigmas[step + 1])
+            },
         )
         assertEquals(listOf(1000f, 750f, 500f, 250f), seenTimesteps)
         assertEquals(9f, state.tensors.getValue("image")[0], 1e-6f)
