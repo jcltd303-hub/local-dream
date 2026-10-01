@@ -249,6 +249,7 @@ fun ModelRunScreen(
     }
     val supportsReferenceEditing = model?.supportsNativeReferenceEditing == true
     val supportsIdentityReference = model?.supportsIdentityReference == true
+    val supportsReferenceInputs = supportsReferenceEditing || supportsIdentityReference
     val externalIdentityReady = model?.hasUsableExternalIdentityAdapter(context) == true
     var identityAdapterScale by remember(modelId) {
         mutableFloatStateOf(model?.configDefaults?.identityAdapterScale ?: 0.8f)
@@ -1059,7 +1060,8 @@ fun ModelRunScreen(
     // lengthens the DiT sequence, and how many fit is left to the user.
     fun processEditReferences(uris: List<Uri>) {
         val existing = editReferenceImages.map { it.uri }.toSet()
-        val selected = uris.distinct().filterNot { it in existing }
+        val fresh = uris.distinct().filterNot { it in existing }
+        val selected = if (supportsIdentityReference && !supportsReferenceEditing) fresh.take(1) else fresh
         if (selected.isEmpty() || editReferencesLoading) return
         scope.launch {
             editReferencesLoading = true
@@ -1089,6 +1091,7 @@ fun ModelRunScreen(
                         )
                     }
                 }
+                if (supportsIdentityReference && !supportsReferenceEditing) editReferenceImages.clear()
                 editReferenceImages.addAll(decoded)
             } catch (e: Exception) {
                 Toast.makeText(
@@ -1577,7 +1580,7 @@ fun ModelRunScreen(
                     val currentGenerationMode = when {
                         wasUltrafix -> GenerationMode.ULTRAFIX
 
-                        supportsReferenceEditing && (selectedImageUri != null || editReferenceImages.isNotEmpty()) ->
+                        supportsReferenceInputs && (selectedImageUri != null || editReferenceImages.isNotEmpty()) ->
                             GenerationMode.EDIT
 
                         isInpaintMode -> GenerationMode.INPAINT
@@ -1956,17 +1959,17 @@ fun ModelRunScreen(
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                if (useImg2img) {
+                                if (useImg2img || supportsIdentityReference) {
                                     // Native edit models take a base image and any number of
                                     // references through one entry; a menu picks
                                     // which one to add.
                                     Box {
                                         TextButton(
                                             onClick = {
-                                                if (supportsReferenceEditing) {
-                                                    showReferenceEditMenu = true
-                                                } else {
-                                                    onSelectImageClick()
+                                                when {
+                                                    supportsReferenceEditing -> showReferenceEditMenu = true
+                                                    supportsIdentityReference -> onAddEditReferencesClick()
+                                                    else -> onSelectImageClick()
                                                 }
                                             },
                                             contentPadding = PaddingValues(
@@ -1975,10 +1978,10 @@ fun ModelRunScreen(
                                             ),
                                         ) {
                                             Text(
-                                                if (supportsReferenceEditing) {
-                                                    stringResource(R.string.flux_edit)
-                                                } else {
-                                                    "img2img"
+                                                when {
+                                                    supportsReferenceEditing -> stringResource(R.string.flux_edit)
+                                                    supportsIdentityReference -> "Identity Reference"
+                                                    else -> "img2img"
                                                 },
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 modifier = Modifier.padding(end = 4.dp),
@@ -2128,7 +2131,7 @@ fun ModelRunScreen(
                                     },
                                     onShare = {
                                         val currentMode = when {
-                                            supportsReferenceEditing && (selectedImageUri != null || editReferenceImages.isNotEmpty()) ->
+                                            supportsReferenceInputs && (selectedImageUri != null || editReferenceImages.isNotEmpty()) ->
                                                 GenerationMode.EDIT
 
                                             isInpaintMode -> GenerationMode.INPAINT
@@ -2227,7 +2230,7 @@ fun ModelRunScreen(
                                     // also closes races with rapid thumbnail
                                     // removals rewriting the scratch file.
                                     val editReferencePayloads =
-                                        if (supportsReferenceEditing) {
+                                        if (supportsReferenceInputs) {
                                             editReferenceImages.map { it.base64 }
                                         } else {
                                             emptyList()
@@ -2682,10 +2685,9 @@ fun ModelRunScreen(
                             }
                         }
 
-                        if (supportsReferenceEditing) {
-                            // The base image is always reference 1, so the
-                            // user's references are numbered after it.
-                            val firstNumber = if (selectedImageUri != null) 2 else 1
+                        if (supportsReferenceInputs) {
+                            // Native edit models may also have a base image; DreamLite v1 uses one identity reference.
+                            val firstNumber = if (supportsReferenceEditing && selectedImageUri != null) 2 else 1
                             editReferenceImages.forEachIndexed { index, reference ->
                                 if (index > 0 || selectedImageUri != null) {
                                     Spacer(modifier = Modifier.width(8.dp))
