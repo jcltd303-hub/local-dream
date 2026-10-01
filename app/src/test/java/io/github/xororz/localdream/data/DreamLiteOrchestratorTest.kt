@@ -284,7 +284,8 @@ class DreamLiteOrchestratorTest {
                     "text_encoder" -> error("external conditioner must bypass text graph")
                     "unet" -> {
                         calls += component
-                        assertArrayEquals(floatArrayOf(7f), inputs.getValue("conditioning"), 0f)
+                        assertEquals(2048, inputs.getValue("conditioning").size)
+                        assertEquals(7f, inputs.getValue("conditioning")[0], 0f)
                         assertArrayEquals(floatArrayOf(1f), inputs.getValue("mask"), 0f)
                         mapOf("noise" to floatArrayOf(0f))
                     }
