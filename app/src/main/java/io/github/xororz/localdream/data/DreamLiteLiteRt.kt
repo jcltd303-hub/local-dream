@@ -16,8 +16,10 @@ object DreamLiteLiteRt {
         val vaeEncoder: File,
         val vaeDecoder: File,
         val textEncoder: File,
+        val abiManifest: File,
     ) {
-        val files: List<File> get() = listOf(unet, vaeEncoder, vaeDecoder, textEncoder)
+        val files: List<File>
+            get() = listOf(unet, vaeEncoder, vaeDecoder, textEncoder, abiManifest)
     }
 
     sealed interface ProbeResult {
@@ -58,7 +60,11 @@ object DreamLiteLiteRt {
             ?: return ProbeResult.Invalid("missing or invalid DreamLite VAE decoder")
         val textEncoder = component("text encoder", config.dreamliteTextEncoder)
             ?: return ProbeResult.Invalid("missing or invalid DreamLite text encoder")
+        val abiManifest = component("ABI manifest", DreamLiteAbi.MANIFEST)
+            ?: return ProbeResult.Invalid("missing or invalid ${DreamLiteAbi.MANIFEST}")
 
-        return ProbeResult.Ready(Package(unet, vaeEncoder, vaeDecoder, textEncoder))
+        return ProbeResult.Ready(
+            Package(unet, vaeEncoder, vaeDecoder, textEncoder, abiManifest),
+        )
     }
 }
