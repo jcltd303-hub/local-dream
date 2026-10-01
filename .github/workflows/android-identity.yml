@@ -14,7 +14,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: false
+      - name: Initialize required native submodules
+        run: |
+          git submodule update --init --depth 1 \
+            app/src/main/cpp/3rdparty/cpp-httplib \
+            app/src/main/cpp/3rdparty/json \
+            app/src/main/cpp/3rdparty/stb \
+            app/src/main/cpp/3rdparty/xtensor \
+            app/src/main/cpp/3rdparty/xtl \
+            app/src/main/cpp/3rdparty/MNN \
+            app/src/main/cpp/3rdparty/xsimd \
+            app/src/main/cpp/3rdparty/zstd \
+            app/src/main/cpp/3rdparty/xtensor-blas \
+            app/src/main/cpp/3rdparty/tokenizers-cpp \
+            app/src/main/cpp/3rdparty/stable-diffusion.cpp
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
