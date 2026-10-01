@@ -39,13 +39,12 @@ class DreamLiteGenerationTest {
         fun t(name: String, state: String) = DreamLiteAbi.Tensor(name, "float32", listOf(1), state)
         val manifest = DreamLiteAbi.Manifest(
             components = mapOf(
-                "text_encoder" to DreamLiteAbi.Component(listOf(t("tokens","tokens")), listOf(t("c","conditioning"))),
                 "unet" to DreamLiteAbi.Component(
                     listOf(
                         DreamLiteAbi.Tensor("sample","float32",listOf(1,4,128,256),"model_input"),
                         t("time","timestep"),
-                        DreamLiteAbi.Tensor("cond","float32",listOf(1,-1,2048),"conditioning"),
-                        DreamLiteAbi.Tensor("mask","float32",listOf(1,-1),"attention_mask"),
+                        DreamLiteAbi.Tensor("cond","float32",listOf(1,512,2048),"conditioning"),
+                        DreamLiteAbi.Tensor("mask","float32",listOf(1,512),"attention_mask"),
                         DreamLiteAbi.Tensor("ids","float32",listOf(1,2),"time_ids")
                     ),
                     listOf(DreamLiteAbi.Tensor("noise","float32",listOf(1,4,128,256),"model_output")),
@@ -57,6 +56,7 @@ class DreamLiteGenerationTest {
             ),
             scheduler = DreamLiteScheduler.Config(1000, true, "exponential"),
             vae = DreamLiteAbi.Vae(1f, 0f),
+            conditioningBackend = DreamLiteAbi.CONDITIONING_QWEN3_VL_GGUF,
         )
         val conditioner = object : DreamLiteConditioner {
             override fun encode(request: DreamLiteConditioning.Request) =
