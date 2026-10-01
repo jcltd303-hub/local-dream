@@ -713,8 +713,11 @@ fun ModelRunScreen(
     promptField.onTextCommitted = { saveAllFields() }
     negativePromptField.onTextCommitted = { saveAllFields() }
 
-    PromptTokenCountEffect(promptField, backendReady = backendReady, backendHost = backendHost)
-    PromptTokenCountEffect(negativePromptField, backendReady = backendReady, backendHost = backendHost)
+    // DreamLite's local backend process is conditioner-only and intentionally
+    // does not expose /tokenize. Its Qwen prompt template is applied natively.
+    val tokenCountReady = backendReady && model?.isDreamLiteLiteRt != true
+    PromptTokenCountEffect(promptField, backendReady = tokenCountReady, backendHost = backendHost)
+    PromptTokenCountEffect(negativePromptField, backendReady = tokenCountReady, backendHost = backendHost)
 
     val onBatchCountsChange = remember {
         { value: Float ->
@@ -1424,6 +1427,7 @@ fun ModelRunScreen(
             aspectRatio = if (useImg2img) prefs.aspectRatio else "1:1"
 
             currentWidth = when {
+                model.isDreamLiteLiteRt -> 1024
                 model.usesFixedCanvas -> 1024
 
                 prefs.width == -1 -> defaultGenerationSize(
@@ -1435,6 +1439,7 @@ fun ModelRunScreen(
                 else -> if (model.isDit) snapDitSize(prefs.width.toFloat()) else prefs.width
             }
             currentHeight = when {
+                model.isDreamLiteLiteRt -> 1024
                 model.usesFixedCanvas -> 1024
 
                 prefs.height == -1 -> defaultGenerationSize(
@@ -2048,6 +2053,7 @@ fun ModelRunScreen(
                                 AdvancedSettingsDialog(
                                     isSdxl = model?.usesFixedCanvas == true,
                                     isDit = model?.isDit == true,
+                                    isDreamLite = model?.isDreamLiteLiteRt == true,
                                     onDitWidthChange = onDitWidthChange,
                                     onDitHeightChange = onDitHeightChange,
                                     runOnCpu = model?.runOnCpu ?: false,
