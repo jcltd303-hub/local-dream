@@ -54,6 +54,50 @@ object DreamLiteRuntimeFactory {
     fun missingQnnLibraries(runtimeDir: File): List<String> =
         requiredQnnLibraries.filterNot { File(runtimeDir, it).isFile }
 
+    fun validateDiagnostics(
+        manifest: DreamLiteAbi.Manifest,
+        diagnostics: DreamLiteRuntime.Diagnostics,
+    ): String? {
+        if (diagnostics.cpuFallback) return "DreamLite runtime used CPU fallback"
+        if (!diagnostics.accelerator.equals(REQUIRED_ACCELERATOR, ignoreCase = true)) {
+            return "DreamLite runtime selected ${diagnostics.accelerator}, expected $REQUIRED_ACCELERATOR"
+        }
+
+        val actualByName = diagnostics.components.associateBy { it.file.nameWithoutExtension }
+        for ((name, expected) in manifest.components) {
+            val actual = actualByName[name]
+                ?: diagnostics.components.firstOrNull {
+                    it.file.nameWithoutExtension.contains(name, ignoreCase = true)
+                }
+                ?: return "DreamLite runtime did not inspect component $name"
+
+            fun compare(
+                kind: String,
+                expectedTensors: List<DreamLiteAbi.Tensor>,
+                actualTensors: List<DreamLiteRuntime.Tensor>,
+            ): String? {
+                if (expectedTensors.size != actualTensors.size) {
+                    return "$name $kind tensor count mismatch"
+                }
+                expectedTensors.zip(actualTensors).forEachIndexed { index, (e, a) ->
+                    if (e.name != a.name || !e.dataType.equals(a.dataType, ignoreCase = true)) {
+                        return "$name $kind tensor $index name/dtype mismatch"
+                    }
+                    if (e.shape.size != a.shape.size ||
+                        e.shape.zip(a.shape).any { (ed, ad) -> ed != -1 && ed != ad }
+                    ) {
+                        return "$name $kind tensor $index shape mismatch"
+                    }
+                }
+                return null
+            }
+
+            compare("input", expected.inputs, actual.inputs)?.let { return it }
+            compare("output", expected.outputs, actual.outputs)?.let { return it }
+        }
+        return null
+    }
+
     sealed interface Result {
         data class Available(val runtime: DreamLiteRuntime) : Result
         data class Unavailable(val reason: String) : Result
