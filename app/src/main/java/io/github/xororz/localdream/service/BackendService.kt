@@ -9,6 +9,7 @@ import io.github.xororz.localdream.BuildConfig
 import io.github.xororz.localdream.R
 import io.github.xororz.localdream.data.DitEngine
 import io.github.xororz.localdream.data.DitResolution
+import io.github.xororz.localdream.data.DreamLiteAbi
 import io.github.xororz.localdream.data.DreamLiteLiteRt
 import io.github.xororz.localdream.data.DreamLiteRuntimeFactory
 import io.github.xororz.localdream.data.Model
@@ -497,17 +498,14 @@ class BackendService : Service() {
                                 is DreamLiteRuntimeFactory.Result.Available -> {
                                     val diagnostics = runtime.runtime.inspect()
                                     runtime.runtime.close()
-                                    if (diagnostics.cpuFallback ||
-                                        !diagnostics.accelerator.equals(
-                                            DreamLiteRuntimeFactory.REQUIRED_ACCELERATOR,
-                                            ignoreCase = true,
-                                        )
-                                    ) {
-                                        "DreamLite runtime rejected: accelerator=" +
-                                            "${diagnostics.accelerator}, " +
-                                            "cpuFallback=${diagnostics.cpuFallback}"
-                                    } else {
-                                        "DreamLite LiteRT NPU probe succeeded; generation wiring pending"
+                                    when (val abi = DreamLiteAbi.parse(probe.modelPackage.abiManifest)) {
+                                        is DreamLiteAbi.ParseResult.Invalid -> abi.reason
+                                        is DreamLiteAbi.ParseResult.Valid -> {
+                                            DreamLiteRuntimeFactory.validateDiagnostics(
+                                                abi.manifest,
+                                                diagnostics,
+                                            ) ?: "DreamLite LiteRT NPU probe succeeded; generation wiring pending"
+                                        }
                                     }
                                 }
                                 is DreamLiteRuntimeFactory.Result.Unavailable -> runtime.reason
