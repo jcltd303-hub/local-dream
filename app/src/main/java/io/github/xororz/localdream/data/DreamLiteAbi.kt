@@ -35,6 +35,7 @@ object DreamLiteAbi {
 
     data class Manifest(
         val components: Map<String, Component>,
+        val scheduler: DreamLiteScheduler.Config? = null,
     )
 
     sealed interface ParseResult {
@@ -58,6 +59,25 @@ object DreamLiteAbi {
         if (root.optInt("steps", -1) != EXPECTED_STEPS) {
             return ParseResult.Invalid("DreamLite ABI must use $EXPECTED_STEPS steps")
         }
+        val schedulerJson = root.optJSONObject("scheduler")
+            ?: return ParseResult.Invalid("DreamLite ABI scheduler is missing")
+        val scheduler = DreamLiteScheduler.Config(
+            numTrainTimesteps = schedulerJson.optInt("num_train_timesteps", -1),
+            useDynamicShifting = schedulerJson.optBoolean("use_dynamic_shifting", false),
+            timeShiftType = schedulerJson.optString("time_shift_type"),
+            baseImageSeqLen = schedulerJson.optInt("base_image_seq_len", 256),
+            maxImageSeqLen = schedulerJson.optInt("max_image_seq_len", 4096),
+            baseShift = schedulerJson.optDouble("base_shift", 0.5).toFloat(),
+            maxShift = schedulerJson.optDouble("max_shift", 1.16).toFloat(),
+        )
+        if (scheduler.numTrainTimesteps <= 0 ||
+            scheduler.timeShiftType !in setOf("exponential", "linear") ||
+            scheduler.baseImageSeqLen <= 0 ||
+            scheduler.maxImageSeqLen <= scheduler.baseImageSeqLen
+        ) {
+            return ParseResult.Invalid("DreamLite ABI scheduler is invalid")
+        }
+
         val componentsJson = root.optJSONObject("components")
             ?: return ParseResult.Invalid("DreamLite ABI components are missing")
         if (requiredComponents.any { !componentsJson.has(it) }) {
@@ -100,6 +120,6 @@ object DreamLiteAbi {
             }
             parsed[name] = Component(inputs, outputs)
         }
-        return ParseResult.Valid(Manifest(parsed))
+        return ParseResult.Valid(Manifest(parsed, scheduler))
     }
 }
