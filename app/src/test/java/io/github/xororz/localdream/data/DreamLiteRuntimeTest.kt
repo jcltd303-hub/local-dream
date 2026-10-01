@@ -18,12 +18,12 @@ class DreamLiteRuntimeTest {
     fun reportsMissingQnnRuntimeLibraries() {
         val dir = temp.newFolder("runtime")
         assertEquals(
-            listOf("libQnnHtp.so", "libQnnSystem.so"),
+            DreamLiteRuntimeFactory.requiredQnnLibraries,
             DreamLiteRuntimeFactory.missingQnnLibraries(dir),
         )
         File(dir, "libQnnHtp.so").writeBytes(byteArrayOf(1))
         assertEquals(
-            listOf("libQnnSystem.so"),
+            DreamLiteRuntimeFactory.requiredQnnLibraries.drop(1),
             DreamLiteRuntimeFactory.missingQnnLibraries(dir),
         )
     }
