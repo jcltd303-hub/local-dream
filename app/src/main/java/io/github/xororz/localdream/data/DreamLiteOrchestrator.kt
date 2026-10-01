@@ -50,6 +50,28 @@ object DreamLiteOrchestrator {
             executor.run(stage, step)
         }
 
+    fun runComponent(
+        runtime: DreamLiteRuntime,
+        manifest: DreamLiteAbi.Manifest,
+        component: String,
+        state: PipelineState,
+    ) {
+        val abi = manifest.components[component]
+            ?: error("DreamLite ABI has no component " + component)
+        val inputs = abi.inputs.associate { tensor ->
+            tensor.name to (
+                state.tensors[tensor.stateKey]
+                    ?: error("DreamLite pipeline tensor " + tensor.stateKey + " is unavailable")
+                )
+        }
+        val outputs = runtime.runFloatComponent(component, inputs)
+        abi.outputs.forEach { tensor ->
+            val value = outputs[tensor.name]
+                ?: error("DreamLite component " + component + " did not return " + tensor.name)
+            state.tensors[tensor.stateKey] = value
+        }
+    }
+
     fun executeStateful(
         plan: Plan,
         state: PipelineState,
