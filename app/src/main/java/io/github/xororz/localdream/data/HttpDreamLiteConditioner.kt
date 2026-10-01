@@ -15,7 +15,9 @@ class HttpDreamLiteConditioner(
 ) : DreamLiteConditioner {
     override fun encode(request: DreamLiteConditioning.Request): DreamLiteConditioner.Output {
         val prepared = DreamLiteConditioning.prepare(request)
-        val body = JSONObject().put("prompt", prepared.prompt)
+        val body = JSONObject()
+            .put("prompt", prepared.prompt)
+            .put("drop_prefix_tokens", prepared.dropPrefixTokens)
         if (prepared.requiresVision) {
             body.put("reference_rgb", Base64.encodeToString(request.referenceRgb, Base64.NO_WRAP))
             body.put("reference_width", request.referenceWidth)
