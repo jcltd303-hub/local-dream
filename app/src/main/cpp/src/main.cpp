@@ -997,7 +997,6 @@ int main(int argc, char **argv) {
       try {
         const auto json = nlohmann::json::parse(request.body);
         const std::string prompt = json.at("prompt").get<std::string>();
-        const int drop = json.value("drop_prefix_tokens", 0);
         const int width = json.value("reference_width", 0);
         const int height = json.value("reference_height", 0);
         std::vector<uint8_t> rgb;
@@ -1015,7 +1014,7 @@ int main(int argc, char **argv) {
         const auto start = std::chrono::high_resolution_clock::now();
         std::lock_guard<std::mutex> lock(g_generation_mutex);
         if (!dreamlite_conditioner->encode(
-                prompt, rgb.empty() ? nullptr : rgb.data(), width, height, drop,
+                prompt, rgb.empty() ? nullptr : rgb.data(), width, height,
                 hidden, mask, sequence, hidden_size))
           throw std::runtime_error(dreamlite_conditioner->last_error());
         const auto latency_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
