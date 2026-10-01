@@ -309,7 +309,7 @@ class DreamLiteOrchestratorTest {
                     listOf(DreamLiteAbi.Tensor("image", "float32", listOf(1), "image")),
                 ),
             ),
-            scheduler = DreamLiteScheduler.Config(1000, false, "exponential"),
+            scheduler = DreamLiteScheduler.Config(1000, true, "exponential"),
         )
         val conditioner = object : DreamLiteConditioner {
             override fun encode(request: DreamLiteConditioning.Request) =
