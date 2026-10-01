@@ -39,9 +39,9 @@ class DreamLiteGenerationTest {
             override fun close() = Unit
         }
         val image = DreamLiteGeneration.run(
-            runtime, manifest, DreamLiteGeneration.Request("portrait", 8, 8, 7), conditioner
+            runtime, manifest, DreamLiteGeneration.Request("portrait", 1024, 1024, 7), conditioner
         )
         assertEquals(listOf("unet","unet","unet","unet","vae_decoder"), calls)
-        assertEquals(4, image.size)
+        assertEquals(4 * 128 * 128, image.size)
     }
 }
