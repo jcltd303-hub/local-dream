@@ -27,6 +27,7 @@ extern "C" {
 #define DIT_ENGINE_ENTRY_SYMBOL "dit_engine_get_api"
 
 typedef struct dit_ctx dit_ctx;
+typedef struct dit_condition_ctx dit_condition_ctx;
 
 typedef enum {
   DIT_MODEL_Z_IMAGE = 0,
@@ -119,6 +120,12 @@ typedef struct {
 
   // Returns NULL on failure; the reason is available from last_error(NULL).
   dit_ctx *(*create)(const dit_ctx_params *params);
+  dit_condition_ctx *(*create_conditioner)(const char *llm_path,
+                                            const char *llm_vision_path,
+                                            const char *backend,
+                                            const char *params_backend,
+                                            int n_threads);
+  void (*destroy_conditioner)(dit_condition_ctx *ctx);
   void (*destroy)(dit_ctx *ctx);
 
   // Writes an interleaved RGB8/RGBA8 image into *out_pixels and its channel
@@ -134,6 +141,9 @@ typedef struct {
   // reuse the engine's Qwen-family LLM/VLM but own their diffusion loop.
   bool (*condition)(dit_ctx *ctx, const dit_condition_params *params,
                     dit_condition_output *out);
+  bool (*condition_standalone)(dit_condition_ctx *ctx,
+                               const dit_condition_params *params,
+                               dit_condition_output *out);
   void (*free_condition)(dit_condition_output *out);
 
   // Last failure on this context, or the last create() failure when ctx is
