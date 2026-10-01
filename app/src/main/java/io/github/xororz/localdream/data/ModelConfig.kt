@@ -24,6 +24,12 @@ data class ModelConfig(
     // Code-level only (not read from config.json): models whose img2img
     // semantics differ, like Klein's reference edit, pick their own default.
     val denoiseStrength: Float? = null,
+    // Optional identity/reference conditioning metadata. Native DiT reference
+    // editing does not require these fields; they describe external adapter
+    // packages (for example an IP-Adapter-style SD1.5/SDXL package).
+    val identityVisionEncoder: String? = null,
+    val identityAdapter: String? = null,
+    val identityAdapterScale: Float? = null,
 ) {
     /** Field-by-field merge: values from this win, [other] fills the nulls. */
     fun withFallback(other: ModelConfig): ModelConfig = ModelConfig(
@@ -33,6 +39,9 @@ data class ModelConfig(
         cfg = cfg ?: other.cfg,
         scheduler = scheduler ?: other.scheduler,
         denoiseStrength = denoiseStrength ?: other.denoiseStrength,
+        identityVisionEncoder = identityVisionEncoder ?: other.identityVisionEncoder,
+        identityAdapter = identityAdapter ?: other.identityAdapter,
+        identityAdapterScale = identityAdapterScale ?: other.identityAdapterScale,
     )
 
     /** Fill any remaining nulls from the global defaults. */
@@ -74,6 +83,10 @@ data class ModelConfig(
                     steps = json.optFloatOrNull("default_steps")
                         ?.roundToInt()?.toFloat()?.coerceIn(STEPS_RANGE),
                     cfg = json.optFloatOrNull("default_cfg")?.coerceIn(CFG_RANGE),
+                    identityVisionEncoder = json.optStringOrNull("identity_vision_encoder"),
+                    identityAdapter = json.optStringOrNull("identity_adapter"),
+                    identityAdapterScale = json.optFloatOrNull("identity_adapter_scale")
+                        ?.coerceIn(0f, 2f),
                     scheduler = json.optStringOrNull("default_scheduler")?.let { value ->
                         value.takeIf { it in VALID_SCHEDULERS }.also {
                             if (it == null) Log.w(TAG, "ignore unknown scheduler '$value' in ${file.path}")
