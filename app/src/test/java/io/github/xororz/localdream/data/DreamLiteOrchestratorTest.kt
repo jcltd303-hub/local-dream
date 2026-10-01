@@ -128,7 +128,8 @@ class DreamLiteOrchestratorTest {
             runtime,
             manifest,
             state,
-        ) { step, _ -> steps += step }
+            beforeDenoise = { step, _ -> steps += step },
+        )
         assertEquals(listOf(0, 1, 2, 3), steps)
         assertEquals(
             listOf("text_encoder", "unet", "unet", "unet", "unet", "vae_decoder"),
