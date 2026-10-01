@@ -28,9 +28,20 @@ class DreamLiteRuntimeTest {
     @Test
     fun rejectsPackageThatChangesAfterProbe() {
         val dir = temp.newFolder("model")
-        val files = listOf("unet.tflite", "ve.tflite", "vd.tflite", "te.tflite")
-            .map { File(dir, it).apply { writeBytes(byteArrayOf(1)) } }
-        val modelPackage = DreamLiteLiteRt.Package(files[0], files[1], files[2], files[3])
+        val files = listOf(
+            "unet.tflite",
+            "ve.tflite",
+            "vd.tflite",
+            "te.tflite",
+            DreamLiteAbi.MANIFEST,
+        ).map { File(dir, it).apply { writeBytes(byteArrayOf(1)) } }
+        val modelPackage = DreamLiteLiteRt.Package(
+            files[0],
+            files[1],
+            files[2],
+            files[3],
+            files[4],
+        )
         files[0].delete()
 
         assertTrue(
