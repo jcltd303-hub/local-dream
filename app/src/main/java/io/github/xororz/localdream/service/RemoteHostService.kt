@@ -278,6 +278,12 @@ class RemoteHostService : Service() {
             return JSONObject().put("ok", true)
         }
         override fun assetsStart(body: JSONObject): RemoteHostServer.Response {
+            if (AutonomousAssetService.isRunning()) {
+                return RemoteHostServer.Response(
+                    409,
+                    JSONObject().put("error", "an autonomous asset run is already active"),
+                )
+            }
             val plan = try {
                 AutonomousAssetPlan.parse(body)
             } catch (e: Exception) {
