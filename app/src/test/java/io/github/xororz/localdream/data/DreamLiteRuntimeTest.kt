@@ -8,6 +8,9 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
 class DreamLiteRuntimeTest {
+    private fun tensor(name: String, shape: List<Int>) =
+        DreamLiteRuntime.Tensor(name, shape, "float32")
+
     @get:Rule
     val temp = TemporaryFolder()
 
@@ -22,6 +25,46 @@ class DreamLiteRuntimeTest {
         assertEquals(
             listOf("libQnnSystem.so"),
             DreamLiteRuntimeFactory.missingQnnLibraries(dir),
+        )
+    }
+
+    @Test
+    fun acceptsMatchingNpuDiagnosticsWithDynamicManifestShape() {
+        val manifest = DreamLiteAbi.Manifest(
+            DreamLiteAbi.requiredComponents.associateWith {
+                DreamLiteAbi.Component(
+                    inputs = listOf(DreamLiteAbi.Tensor("in", "float32", listOf(1, -1))),
+                    outputs = listOf(DreamLiteAbi.Tensor("out", "float32", listOf(1, 4))),
+                )
+            },
+        )
+        val diagnostics = DreamLiteRuntime.Diagnostics(
+            runtime = "litert",
+            accelerator = "npu",
+            components = DreamLiteAbi.requiredComponents.map {
+                DreamLiteRuntime.ComponentInfo(
+                    file = File("$it.tflite"),
+                    inputs = listOf(tensor("in", listOf(1, 77))),
+                    outputs = listOf(tensor("out", listOf(1, 4))),
+                )
+            },
+            cpuFallback = false,
+        )
+        assertEquals(null, DreamLiteRuntimeFactory.validateDiagnostics(manifest, diagnostics))
+    }
+
+    @Test
+    fun rejectsCpuFallbackDiagnostics() {
+        val manifest = DreamLiteAbi.Manifest(emptyMap())
+        val diagnostics = DreamLiteRuntime.Diagnostics(
+            runtime = "litert",
+            accelerator = "npu",
+            components = emptyList(),
+            cpuFallback = true,
+        )
+        assertEquals(
+            "DreamLite runtime used CPU fallback",
+            DreamLiteRuntimeFactory.validateDiagnostics(manifest, diagnostics),
         )
     }
 
