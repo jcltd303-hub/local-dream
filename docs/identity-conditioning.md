@@ -47,3 +47,67 @@ initialization time, first/subsequent inference latency, peak memory, output
 shape and embedding norm. Identity quality should be evaluated independently
 from prompt adherence (for example with a face-embedding cosine metric over a
 multi-pose/multi-lighting test set).
+
+
+## Locked first target: SD 1.5 base IP-Adapter
+
+The first external adapter target is the canonical SD 1.5 IP-Adapter
+(`ip-adapter_sd15.bin`), not InstantID and not IP-Adapter Plus.
+
+Contract verified against Tencent's reference implementation:
+
+- image encoder: OpenCLIP ViT-H/14 projection model
+- encoder input preprocessing: CLIP image preprocessing
+- encoder result: global projected image embedding
+- image projection: Linear(1024 -> 4 * 768) + LayerNorm(768)
+- image prompt tokens: 4 x 768 for SD 1.5
+- text context remains the normal 77 x 768 CLIP context
+- each UNet cross-attention layer owns separate learned image `to_k_ip` and
+  `to_v_ip` projections
+- adapter scale multiplies the image-attention contribution at the attention
+  residual, not the CLIP embedding and not the final noise prediction
+
+Therefore the stock Local Dream SD1.5 QNN UNet cannot be made IP-Adapter
+compatible by changing its existing 77-token `encoder_hidden_states` input.
+Its compiled graph currently has exactly three inputs: latent, timestep, and
+77x768 text context.
+
+### Required compiled UNet ABI
+
+The re-exported SD1.5 QNN UNet must preserve the existing inputs and add one
+named input carrying the four projected image tokens:
+
+```
+sample                  [1,4,H/8,W/8]
+timestep                [1]
+encoder_hidden_states   [1,77,768]
+ip_adapter_tokens       [1,4,768]
+ip_adapter_scale        [1]       # preferred; alternatively bake scale=1 and
+                                  # scale image-attention outputs in graph
+```
+
+Every cross-attention block computes its normal text attention plus the
+IP-Adapter K/V attention from `ip_adapter_tokens`. `ip_adapter_scale` is
+applied only to that second contribution.
+
+The QNN runtime must bind these inputs by tensor name. Positional binding is
+not acceptable for the adapter graph.
+
+### Mobile split
+
+To keep the S24 Ultra memory peak controlled, package the identity path as
+three independently loadable contexts:
+
+1. `vision_encoder.bin`: CLIP ViT-H image -> global image embedding.
+2. `identity_adapter.bin`: global embedding -> [1,4,768] projected tokens.
+3. adapter-compatible `unet.bin`: consumes text context plus projected image
+   tokens and scale.
+
+The first two run once per selected reference image. Their outputs are cached,
+then their QNN contexts may be released before denoising if device measurements
+show a meaningful memory win. The UNet consumes only the small projected token
+buffer on every denoising step.
+
+A model package is not advertised as externally identity-capable until all
+three graph contracts match. The runtime must fail closed on tensor count/name
+or element-count mismatch.
