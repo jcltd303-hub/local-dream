@@ -71,6 +71,8 @@ jobs:
           test -d "$QNN_SDK_ROOT/lib/aarch64-android"
           echo "QNN_SDK_ROOT=$QNN_SDK_ROOT" >> "$GITHUB_ENV"
           echo "Using QNN SDK at $QNN_SDK_ROOT"
+      - name: Install Rust Android target
+        run: rustup target add aarch64-linux-android
       - name: Install conversion test dependency
         run: python -m pip install pytest numpy
       - name: Test DreamLite conversion tooling
