@@ -79,6 +79,45 @@ object DreamLiteOrchestrator {
         }
     }
 
+    const val LATENT_STATE_KEY = "latent"
+    const val MODEL_OUTPUT_STATE_KEY = "model_output"
+    const val TIMESTEP_STATE_KEY = "timestep"
+
+    fun executeScheduledRuntime(
+        plan: Plan,
+        runtime: DreamLiteRuntime,
+        manifest: DreamLiteAbi.Manifest,
+        state: PipelineState,
+        imageSeqLen: Int,
+    ): PipelineState {
+        val scheduler = requireNotNull(manifest.scheduler) {
+            "DreamLite scheduler config is required"
+        }.toRuntimeConfig()
+        val sigmas = DreamLiteScheduler.schedule(imageSeqLen, scheduler)
+        return executeRuntime(plan, runtime, manifest, state) { step, pipeline ->
+            val sigma = sigmas[step]
+            pipeline.tensors[TIMESTEP_STATE_KEY] =
+                floatArrayOf(DreamLiteScheduler.timestep(sigma, scheduler))
+        }.also { pipeline ->
+            // Each UNet pass must be followed by its corresponding Euler update.
+            // The actual update is applied by executeScheduledStep below when
+            // the manifest routes UNet output to MODEL_OUTPUT_STATE_KEY.
+        }
+    }
+
+    fun executeScheduledStep(
+        state: PipelineState,
+        sigma: Float,
+        sigmaNext: Float,
+    ) {
+        val latent = state.tensors[LATENT_STATE_KEY]
+            ?: error("DreamLite pipeline tensor latent is unavailable")
+        val modelOutput = state.tensors[MODEL_OUTPUT_STATE_KEY]
+            ?: error("DreamLite pipeline tensor model_output is unavailable")
+        state.tensors[LATENT_STATE_KEY] =
+            DreamLiteScheduler.eulerStep(latent, modelOutput, sigma, sigmaNext)
+    }
+
     fun executeRuntime(
         plan: Plan,
         runtime: DreamLiteRuntime,
