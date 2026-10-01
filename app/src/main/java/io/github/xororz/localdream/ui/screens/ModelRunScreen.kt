@@ -247,8 +247,9 @@ fun ModelRunScreen(
     } else {
         remember(modelRepository.models) { modelRepository.models.find { it.id == modelId } }
     }
-    val supportsReferenceEditing = model?.ditKind == "klein" ||
-        model?.ditKind == "qwen21"
+    val supportsReferenceEditing = model?.supportsNativeReferenceEditing == true
+    val supportsIdentityReference = model?.supportsIdentityReference == true
+    val identityAdapterScale = model?.configDefaults?.identityAdapterScale ?: 0.8f
     LaunchedEffect(Unit) {
         if (!isRemote) {
             modelRepository.ensureLoaded()
