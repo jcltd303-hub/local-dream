@@ -7,10 +7,14 @@ on:
     branches: [master]
   workflow_dispatch:
 
+env:
+  QAIRT_VERSION: "2.50.40.260831"
+  QAIRT_URL: "https://softwarecenter.qualcomm.com/api/download/software/sdks/Qualcomm_AI_Runtime_Community/All/2.50.40.260831/v2.50.40.260831.zip"
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
         with:
@@ -36,6 +40,36 @@ jobs:
           distribution: temurin
           java-version: "17"
           cache: gradle
+      - name: Install Android native toolchain
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;28.2.13676358" "cmake;3.31.1"
+          echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+      - name: Cache Qualcomm AI Runtime SDK
+        id: cache-qairt
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/qairt
+          key: qairt-${{ runner.os }}-${{ env.QAIRT_VERSION }}
+      - name: Download Qualcomm AI Runtime SDK
+        if: steps.cache-qairt.outputs.cache-hit != 'true'
+        run: |
+          rm -rf "$RUNNER_TEMP/qairt"
+          mkdir -p "$RUNNER_TEMP/qairt"
+          curl --fail --location --retry 4 --retry-delay 5             "$QAIRT_URL"             --output "$RUNNER_TEMP/qairt.zip"
+          unzip -q "$RUNNER_TEMP/qairt.zip" -d "$RUNNER_TEMP/qairt"
+      - name: Locate Qualcomm QNN SDK
+        run: |
+          QNN_INCLUDE="$(find "$RUNNER_TEMP/qairt" -type d -path '*/include/QNN' -print -quit)"
+          if [ -z "$QNN_INCLUDE" ]; then
+            echo "::error::QAIRT archive does not contain include/QNN"
+            exit 1
+          fi
+          QNN_SDK_ROOT="$(dirname "$(dirname "$QNN_INCLUDE")")"
+          test -d "$QNN_SDK_ROOT/examples/QNN/SampleApp/SampleApp"
+          test -d "$QNN_SDK_ROOT/lib/aarch64-android"
+          echo "QNN_SDK_ROOT=$QNN_SDK_ROOT" >> "$GITHUB_ENV"
+          echo "Using QNN SDK at $QNN_SDK_ROOT"
       - name: Install conversion test dependency
         run: python -m pip install pytest numpy
       - name: Test DreamLite conversion tooling
@@ -46,6 +80,18 @@ jobs:
         run: ./gradlew testBasicDebugUnitTest
       - name: Build basic debug APK
         run: ./gradlew assembleBasicDebug
+      - name: Verify native backend is packaged
+        run: |
+          APK="$(find app/build/outputs/apk/basic/debug -type f -name '*.apk' -print -quit)"
+          if [ -z "$APK" ]; then
+            echo "::error::Basic debug APK was not produced"
+            exit 1
+          fi
+          unzip -l "$APK" | tee "$RUNNER_TEMP/apk-contents.txt"
+          if ! grep -Eq 'lib/arm64-v8a/libstable_diffusion_core\.so' "$RUNNER_TEMP/apk-contents.txt"; then
+            echo "::error::APK is missing lib/arm64-v8a/libstable_diffusion_core.so"
+            exit 1
+          fi
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
