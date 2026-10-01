@@ -64,3 +64,24 @@ Android/data/<package>/files/Pictures/LocalDreamAutonomous/<run-id>/
 A completed job is never regenerated on resume. Failed jobs retry up to
 `max_retries`, with short linear backoff, then remain recorded in the state
 manifest for inspection.
+
+
+## Production host API
+
+When **Remote Host** mode is active, the control server on port `8808`
+exposes the autonomous batch runner to an external orchestrator:
+
+- `POST /assets/start` — body is the plan JSON above.
+- `GET /assets/status` — latest run state, counts, active job and output path.
+- `POST /assets/resume` — resume the latest persisted run.
+- `POST /assets/stop` — stop the active run after the current service cancellation.
+
+A successful start returns the resolved `run_id` and job count. Status returns
+`idle`, `running`, `complete`, or `error`.
+
+Plans are validated before execution: job IDs must be unique, plans are capped
+at 500 jobs, each job may carry at most 8 reference images, dimensions must be
+64..4096, steps 1..200, CFG must be finite/non-negative, and model/prompt/
+scheduler values must be present. The control server accepts request bodies up
+to 16 MiB so production plans can include base64 references without unbounded
+memory use.
