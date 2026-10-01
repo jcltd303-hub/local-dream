@@ -24,22 +24,49 @@ object DreamLiteOrchestrator {
      * define converted graph tensor names/shapes. This keeps scheduling
      * testable without inventing an Android-side model ABI.
      */
+    data class PipelineState(
+        val tensors: MutableMap<String, FloatArray> = linkedMapOf(),
+    ) {
+        fun putAll(outputs: Map<String, FloatArray>) {
+            tensors.putAll(outputs)
+        }
+
+        fun require(names: Collection<String>): Map<String, FloatArray> =
+            names.associateWith { name ->
+                tensors[name] ?: error("DreamLite pipeline tensor $name is unavailable")
+            }
+    }
+
     fun interface StageExecutor {
         fun run(stage: Stage, denoiseStep: Int?)
     }
 
-    fun execute(plan: Plan, executor: StageExecutor) {
+    fun interface StatefulStageExecutor {
+        fun run(stage: Stage, denoiseStep: Int?, state: PipelineState)
+    }
+
+    fun execute(plan: Plan, executor: StageExecutor) =
+        executeStateful(plan, PipelineState()) { stage, step, _ ->
+            executor.run(stage, step)
+        }
+
+    fun executeStateful(
+        plan: Plan,
+        state: PipelineState,
+        executor: StatefulStageExecutor,
+    ): PipelineState {
         var denoiseStep = 0
         plan.stages.forEach { stage ->
             if (stage == Stage.UNET) {
-                executor.run(stage, denoiseStep++)
+                executor.run(stage, denoiseStep++, state)
             } else {
-                executor.run(stage, null)
+                executor.run(stage, null, state)
             }
         }
         check(denoiseStep == DENOISE_STEPS) {
             "DreamLite execution must run exactly $DENOISE_STEPS denoise steps"
         }
+        return state
     }
 
     fun plan(hasReferenceImage: Boolean): Plan {
