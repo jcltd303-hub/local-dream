@@ -25,6 +25,7 @@ object DreamLiteAbi {
         val name: String,
         val dataType: String,
         val shape: List<Int>,
+        val stateKey: String = name,
     )
 
     data class Component(
@@ -79,7 +80,9 @@ object DreamLiteAbi {
                         }
                     }
                     if (shape.isEmpty()) return null
-                    add(Tensor(name, dtype, shape))
+                    val stateKey = tensor.optString("state_key", name)
+                        .takeIf { it.isNotBlank() } ?: return null
+                    add(Tensor(name, dtype, shape, stateKey))
                 }
             }
         }
