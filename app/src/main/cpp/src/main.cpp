@@ -92,6 +92,10 @@ struct ServerOptions {
   std::string dit_params_backend = "all=disk";
   int dit_threads = 4;
   int dit_vae_tile_size = 64;
+  // Optional standalone QNN vision encoder for identity-conditioning bring-up.
+  // Kept independent from the diffusion pipeline until adapter tensor contracts
+  // are verified for a packaged model.
+  std::string identity_vision_path;
   bool convert_clip_skip_2 = false;
 
   bool isSdxl() const { return type == ModelType::kSdxl || type == ModelType::kSdxlMnn; }
@@ -144,6 +148,7 @@ static void showHelp() {
          "  --anima_seq_dit        (anima+lowram) never keep both DiT halves "
          "resident; for 12GB devices\n"
          "  --clip_skip_2          (convert) export CLIP with skip 2\n"
+         "  --identity_vision <f>  Optional QNN vision encoder .bin for /identity/embed\n"
          "  --log_level <n>        QNN log level\n"
          "  --version              Print QNN SDK build id\n"
          "  --help                 Show this help\n";
@@ -175,6 +180,7 @@ static ServerOptions processCommandLine(int argc, char **argv) {
     OPT_UPSCALER_MODE,
     OPT_LOWRAM,
     OPT_ANIMA_SEQ_DIT,
+    OPT_IDENTITY_VISION,
     OPT_LOG_LEVEL
   };
   static struct pal::Option s_longOptions[] = {
@@ -195,6 +201,7 @@ static ServerOptions processCommandLine(int argc, char **argv) {
       {"upscaler_mode", pal::no_argument, NULL, OPT_UPSCALER_MODE},
       {"lowram", pal::no_argument, NULL, OPT_LOWRAM},
       {"anima_seq_dit", pal::no_argument, NULL, OPT_ANIMA_SEQ_DIT},
+      {"identity_vision", pal::required_argument, NULL, OPT_IDENTITY_VISION},
       {"log_level", pal::required_argument, NULL, OPT_LOG_LEVEL},
       {NULL, 0, NULL, 0}};
 
@@ -258,6 +265,9 @@ static ServerOptions processCommandLine(int argc, char **argv) {
         break;
       case OPT_ANIMA_SEQ_DIT:
         opts.anima_seq_dit = true;
+        break;
+      case OPT_IDENTITY_VISION:
+        opts.identity_vision_path = pal::g_optArg;
         break;
       case OPT_LOG_LEVEL:
         logLevel = sample_app::parseLogLevel(pal::g_optArg);
@@ -805,6 +815,7 @@ int main(int argc, char **argv) {
 
   std::unique_ptr<TextEncoder> text_encoder;
   std::unique_ptr<Pipeline> pipeline;
+  std::unique_ptr<QnnModel> identity_vision;
   MNN::Interpreter *safety_interpreter = nullptr;
   MNN::Session *safety_session = nullptr;
 
@@ -900,6 +911,16 @@ int main(int argc, char **argv) {
     }
   }
 
+  if (!opts.identity_vision_path.empty()) {
+    if (!qnn_runtime::isInitialized())
+      showHelpAndExit("--identity_vision requires a QNN runtime");
+    if (!std::filesystem::exists(opts.identity_vision_path))
+      showHelpAndExit("Identity vision model not found: " + opts.identity_vision_path);
+    identity_vision = qnn_runtime::createModel(opts.identity_vision_path, "identity_vision");
+    if (!identity_vision || qnn_runtime::initializeApp("IdentityVision", identity_vision) != EXIT_SUCCESS)
+      showHelpAndExit("Identity vision model initialization failed");
+  }
+
   // --- HTTP Server ---
   httplib::Server svr;
   svr.set_default_headers({
@@ -915,6 +936,31 @@ int main(int argc, char **argv) {
     res.status = 200;
   });
 
+  if (identity_vision) {
+    svr.Post("/identity/embed", [&identity_vision](const httplib::Request &request,
+                                                   httplib::Response &res) {
+      try {
+        const auto json = nlohmann::json::parse(request.body);
+        const auto values = json.at("input").get<std::vector<float>>();
+        std::vector<float> embedding;
+        const auto start = std::chrono::high_resolution_clock::now();
+        std::lock_guard<std::mutex> lock(g_generation_mutex);
+        if (identity_vision->executeEmbeddingGraph(values.data(), values.size(), embedding) !=
+            StatusCode::SUCCESS)
+          throw std::runtime_error("identity vision execution failed");
+        const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::high_resolution_clock::now() - start).count();
+        double norm2 = 0.0;
+        for (float v : embedding) norm2 += static_cast<double>(v) * v;
+        nlohmann::json out = {{"elements", embedding.size()}, {"latency_ms", ms},
+                              {"l2_norm", std::sqrt(norm2)}, {"embedding", embedding}};
+        res.set_content(out.dump(), "application/json");
+      } catch (const std::exception &e) {
+        res.status = 400;
+        res.set_content(nlohmann::json({{"error", e.what()}}).dump(), "application/json");
+      }
+    });
+  }
   if (pipeline) registerGenerateEndpoint(svr, pipeline.get());
   registerUpscaleEndpoint(svr);
   if (text_encoder) registerTokenizeEndpoint(svr, text_encoder.get());
