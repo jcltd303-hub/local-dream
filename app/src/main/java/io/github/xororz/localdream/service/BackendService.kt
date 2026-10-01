@@ -577,7 +577,11 @@ class BackendService : Service() {
                 ) {
                     Log.w(TAG, "Ignoring QNN identity adapter on non-QNN backend: $backendType")
                 } else {
-                    command += listOf("--identity_vision", identityVision.absolutePath)
+                    command += listOf(
+                        "--identity_vision", identityVision.absolutePath,
+                        "--identity_adapter", identityAdapter.absolutePath,
+                        "--identity_scale", (packageConfig.identityAdapterScale ?: 0.8f).toString(),
+                    )
                     Log.i(
                         TAG,
                         "Identity package ready: vision=${identityVision.name}, " +
