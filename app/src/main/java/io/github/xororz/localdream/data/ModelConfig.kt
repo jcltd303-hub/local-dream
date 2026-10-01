@@ -30,6 +30,9 @@ data class ModelConfig(
     val identityVisionEncoder: String? = null,
     val identityAdapter: String? = null,
     val identityAdapterScale: Float? = null,
+    // ABI identifier prevents loading an adapter compiled for a different
+    // conditioning scheme (Plus/FaceID/InstantID are intentionally distinct).
+    val identityAdapterType: String? = null,
 ) {
     /** Field-by-field merge: values from this win, [other] fills the nulls. */
     fun withFallback(other: ModelConfig): ModelConfig = ModelConfig(
@@ -42,6 +45,7 @@ data class ModelConfig(
         identityVisionEncoder = identityVisionEncoder ?: other.identityVisionEncoder,
         identityAdapter = identityAdapter ?: other.identityAdapter,
         identityAdapterScale = identityAdapterScale ?: other.identityAdapterScale,
+        identityAdapterType = identityAdapterType ?: other.identityAdapterType,
     )
 
     /** Fill any remaining nulls from the global defaults. */
@@ -87,6 +91,8 @@ data class ModelConfig(
                     identityAdapter = json.optStringOrNull("identity_adapter"),
                     identityAdapterScale = json.optFloatOrNull("identity_adapter_scale")
                         ?.coerceIn(0f, 2f),
+                    identityAdapterType = json.optStringOrNull("identity_adapter_type")
+                        ?.takeIf { it == "ip_adapter_sd15" },
                     scheduler = json.optStringOrNull("default_scheduler")?.let { value ->
                         value.takeIf { it in VALID_SCHEDULERS }.also {
                             if (it == null) Log.w(TAG, "ignore unknown scheduler '$value' in ${file.path}")
