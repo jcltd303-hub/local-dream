@@ -128,7 +128,7 @@ class DreamLiteOrchestratorTest {
             runtime,
             manifest,
             state,
-            beforeDenoise = { step, _ -> steps += step },
+            { step, _ -> steps += step },
         )
         assertEquals(listOf(0, 1, 2, 3), steps)
         assertEquals(
