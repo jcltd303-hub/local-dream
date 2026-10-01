@@ -10,6 +10,10 @@ class DreamLiteLiteRtTest {
     @get:Rule
     val temp = TemporaryFolder()
 
+    private fun writeAbi(dir: File) {
+        File(dir, DreamLiteAbi.MANIFEST).writeText("{}")
+    }
+
     private fun config(unet: String = "unet.tflite") = ModelConfig(
         runtime = DreamLiteLiteRt.RUNTIME,
         dreamliteUnet = unet,
@@ -24,6 +28,7 @@ class DreamLiteLiteRtTest {
         listOf("unet.tflite", "ve.tflite", "vd.tflite", "te.tflite").forEach {
             File(dir, it).writeBytes(byteArrayOf(1))
         }
+        writeAbi(dir)
         assertTrue(DreamLiteLiteRt.probe(dir, config()) is DreamLiteLiteRt.ProbeResult.Ready)
     }
 
@@ -34,6 +39,7 @@ class DreamLiteLiteRtTest {
         listOf("ve.tflite", "vd.tflite", "te.tflite").forEach {
             File(dir, it).writeBytes(byteArrayOf(1))
         }
+        writeAbi(dir)
         assertTrue(DreamLiteLiteRt.probe(dir, config()) is DreamLiteLiteRt.ProbeResult.Invalid)
     }
 
@@ -44,6 +50,7 @@ class DreamLiteLiteRtTest {
         listOf("ve.tflite", "vd.tflite", "te.tflite").forEach {
             File(root, it).writeBytes(byteArrayOf(1))
         }
+        writeAbi(root)
         assertTrue(
             DreamLiteLiteRt.probe(root, config("../outside.tflite")) is
                 DreamLiteLiteRt.ProbeResult.Invalid,
