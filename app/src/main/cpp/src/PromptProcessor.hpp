@@ -385,6 +385,13 @@ class PromptProcessor {
   size_t getEmbeddingCount() const { return embeddings_.size(); }
   size_t getEmbedding2Count() const { return embeddings_2_.size(); }
 
+  std::vector<std::string> getEmbeddingNames() const {
+    std::vector<std::string> names;
+    names.reserve(embeddings_.size());
+    for (const auto &entry : embeddings_) names.push_back(entry.first);
+    return names;
+  }
+
   bool hasEmbedding(const std::string &name) const {
     return embeddings_.find(toLowerCase(name)) != embeddings_.end();
   }
