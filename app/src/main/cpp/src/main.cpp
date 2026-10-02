@@ -84,6 +84,7 @@ struct ServerOptions {
   bool anima_seq_dit = false;  // (anima+lowram) never co-resident DiT halves
   bool upscaler_mode = false;
   bool dreamlite_conditioner_mode = false;
+  bool identity_only_mode = false;
   bool convert_mode = false;
   // Run all three DiT modules on the Hexagon NPU. The Android catalog only
   // exposes these models on the SM8750-and-newer devices validated upstream.
@@ -132,6 +133,7 @@ static void showHelp() {
          "(DiT engine)\n"
          "  --upscaler_mode        Upscale-only server, no diffusion model\n"
          "  --dreamlite_conditioner Qwen3-VL-only server for DreamLite LiteRT\n"
+         "  --identity_only        Face detect/embed server only; no diffusion model\n"
          "  --convert <dir>        Convert model.safetensors in <dir> to MNN "
          "and exit\n"
          "\n"
@@ -190,6 +192,7 @@ static ServerOptions processCommandLine(int argc, char **argv) {
     OPT_PATCH,
     OPT_UPSCALER_MODE,
     OPT_DREAMLITE_CONDITIONER,
+    OPT_IDENTITY_ONLY,
     OPT_LOWRAM,
     OPT_ANIMA_SEQ_DIT,
     OPT_IDENTITY_VISION,
@@ -215,6 +218,7 @@ static ServerOptions processCommandLine(int argc, char **argv) {
       {"patch", pal::required_argument, NULL, OPT_PATCH},
       {"upscaler_mode", pal::no_argument, NULL, OPT_UPSCALER_MODE},
       {"dreamlite_conditioner", pal::no_argument, NULL, OPT_DREAMLITE_CONDITIONER},
+      {"identity_only", pal::no_argument, NULL, OPT_IDENTITY_ONLY},
       {"lowram", pal::no_argument, NULL, OPT_LOWRAM},
       {"anima_seq_dit", pal::no_argument, NULL, OPT_ANIMA_SEQ_DIT},
       {"identity_vision", pal::required_argument, NULL, OPT_IDENTITY_VISION},
@@ -282,6 +286,9 @@ static ServerOptions processCommandLine(int argc, char **argv) {
       case OPT_DREAMLITE_CONDITIONER:
         opts.dreamlite_conditioner_mode = true;
         break;
+      case OPT_IDENTITY_ONLY:
+        opts.identity_only_mode = true;
+        break;
       case OPT_LOWRAM:
         opts.lowram = true;
         break;
@@ -313,7 +320,17 @@ static ServerOptions processCommandLine(int argc, char **argv) {
   }
 
   if (opts.upscaler_mode || opts.convert_mode) return opts;
-  if (opts.dreamlite_conditioner_mode) {
+  if (opts.identity_only_mode) {
+    if (opts.lib_dir.empty()) showHelpAndExit("Missing --lib_dir");
+    if (opts.identity_vision_path.empty() && opts.face_detector_path.empty())
+      showHelpAndExit("--identity_only requires --identity_vision and/or --face_detector");
+    return opts;
+  }
+  if (opts.identity_only_mode) {
+    if (!qnn_runtime::init(opts.lib_dir))
+      showHelpAndExit("Failed get QNN system func ptrs.");
+    QNN_INFO("Identity-only QNN mode ready");
+  } else if (opts.dreamlite_conditioner_mode) {
     if (opts.model_dir.empty()) showHelpAndExit("Missing --model_dir");
     if (opts.lib_dir.empty()) showHelpAndExit("Missing --lib_dir");
     return opts;
