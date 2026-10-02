@@ -823,6 +823,19 @@ static void registerUpscaleEndpoint(httplib::Server &svr) {
   });
 }
 
+static void registerEmbeddingEndpoint(httplib::Server &svr,
+                                      TextEncoder *text_encoder) {
+  svr.Get("/embeddings", [text_encoder](const httplib::Request &,
+                                        httplib::Response &res) {
+    nlohmann::json resp = {
+        {"count", text_encoder ? text_encoder->embeddingCount() : 0},
+        {"names", text_encoder ? text_encoder->embeddingNames()
+                                : std::vector<std::string>{}}};
+    res.status = 200;
+    res.set_content(resp.dump(), "application/json");
+  });
+}
+
 static void registerTokenizeEndpoint(httplib::Server &svr,
                                      TextEncoder *text_encoder) {
   svr.Post("/tokenize", [text_encoder](const httplib::Request &req,
@@ -1132,7 +1145,10 @@ int main(int argc, char **argv) {
 
   if (pipeline) registerGenerateEndpoint(svr, pipeline.get());
   registerUpscaleEndpoint(svr);
-  if (text_encoder) registerTokenizeEndpoint(svr, text_encoder.get());
+  if (text_encoder) {
+    registerTokenizeEndpoint(svr, text_encoder.get());
+    registerEmbeddingEndpoint(svr, text_encoder.get());
+  }
 
   std::cout << "Server listening on " << opts.listen_address << ":" << opts.port
             << std::endl;
