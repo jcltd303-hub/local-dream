@@ -824,7 +824,11 @@ static void registerUpscaleEndpoint(httplib::Server &svr) {
 }
 
 static void registerEmbeddingEndpoint(httplib::Server &svr,
-                                      TextEncoder *text_encoder) {
+                                      TextEncoder *text_encoder,
+                                      const std::string &model_dir) {
+  auto embeddings_dir = (std::filesystem::path(model_dir).parent_path().parent_path() /
+                         "embeddings").string();
+
   svr.Get("/embeddings", [text_encoder](const httplib::Request &,
                                         httplib::Response &res) {
     nlohmann::json resp = {
@@ -833,6 +837,26 @@ static void registerEmbeddingEndpoint(httplib::Server &svr,
                                 : std::vector<std::string>{}}};
     res.status = 200;
     res.set_content(resp.dump(), "application/json");
+  });
+
+  svr.Post("/embeddings/reload",
+           [text_encoder, embeddings_dir](const httplib::Request &,
+                                          httplib::Response &res) {
+    try {
+      if (!text_encoder) throw std::runtime_error("text encoder unavailable");
+      text_encoder->loadTextualInversions(embeddings_dir);
+      nlohmann::json resp = {
+          {"count", text_encoder->embeddingCount()},
+          {"names", text_encoder->embeddingNames()},
+          {"directory", embeddings_dir}};
+      res.status = 200;
+      res.set_content(resp.dump(), "application/json");
+    } catch (const std::exception &e) {
+      res.status = 500;
+      res.set_content(
+          nlohmann::json({{"error", e.what()}}).dump(),
+          "application/json");
+    }
   });
 }
 
@@ -1147,7 +1171,7 @@ int main(int argc, char **argv) {
   registerUpscaleEndpoint(svr);
   if (text_encoder) {
     registerTokenizeEndpoint(svr, text_encoder.get());
-    registerEmbeddingEndpoint(svr, text_encoder.get());
+    registerEmbeddingEndpoint(svr, text_encoder.get(), opts.model_dir);
   }
 
   std::cout << "Server listening on " << opts.listen_address << ":" << opts.port
