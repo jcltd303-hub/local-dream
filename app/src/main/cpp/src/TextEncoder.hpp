@@ -181,6 +181,9 @@ class TextEncoder {
   }
 
   size_t embeddingCount() const { return promptProcessor_.getEmbeddingCount(); }
+  std::vector<std::string> embeddingNames() const {
+    return promptProcessor_.getEmbeddingNames();
+  }
 
   // True if any token of `prompt_text` resolves to a textual-inversion
   // embedding. Used to opt that side out of the persistent prompt cache.
