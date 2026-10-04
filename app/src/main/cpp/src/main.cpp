@@ -1061,8 +1061,17 @@ int main(int argc, char **argv) {
   svr.Options(R"(.*)", [](const httplib::Request &, httplib::Response &res) {
     res.status = 204;
   });
-  svr.Get("/health", [](const httplib::Request &, httplib::Response &res) {
+  svr.Get("/health", [&opts](const httplib::Request &, httplib::Response &res) {
+    nlohmann::json health = {
+        {"ok", true},
+        {"model_dir", opts.model_dir},
+        {"model_type", static_cast<int>(opts.type)},
+        {"lowram", opts.lowram},
+        {"identity_only", opts.identity_only_mode},
+        {"upscaler_mode", opts.upscaler_mode},
+    };
     res.status = 200;
+    res.set_content(health.dump(), "application/json");
   });
 
   if (dreamlite_conditioner) {
